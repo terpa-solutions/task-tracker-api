@@ -104,6 +104,78 @@ tasksRouter.post('/', (req: Request, res: Response) => {
 });
 
 /**
+ * Upper bound on how many ids one bulk-complete call may carry.
+ *
+ * SQLite refuses a statement with more than 32766 bound parameters, so an
+ * unbounded list would surface as a 500. 1000 stays well clear of that while
+ * being far more than this endpoint realistically needs, and callers get a
+ * clear 400 instead of a crash.
+ */
+const BULK_COMPLETE_MAX_IDS = 1000;
+
+/**
+ * POST /tasks/bulk-complete
+ * Mark every task in { "ids": [1, 2, 3] } as completed.
+ *
+ * `updated` counts rows that actually changed state. The UPDATE is filtered on
+ * `completed = 0`, because without it SQLite reports every matched row as
+ * changed and an already-completed task would inflate the count.
+ *
+ * Ids that matched nothing, and ids that were already completed, are reported
+ * separately so a caller can tell a genuine no-op from a wrong id — a bare
+ * count of 0 is ambiguous between the two.
+ */
+tasksRouter.post('/bulk-complete', (req: Request, res: Response) => {
+  const { ids } = req.body ?? {};
+
+  if (!Array.isArray(ids) || ids.length === 0) {
+    return res
+      .status(400)
+      .json({ error: 'Field "ids" is required and must be a non-empty array of task ids.' });
+  }
+
+  if (ids.length > BULK_COMPLETE_MAX_IDS) {
+    return res.status(400).json({
+      error: `Field "ids" must contain at most ${BULK_COMPLETE_MAX_IDS} ids (received ${ids.length}).`,
+    });
+  }
+
+  if (!ids.every((id) => Number.isInteger(id) && id > 0)) {
+    return res
+      .status(400)
+      .json({ error: 'Field "ids" must contain only positive integers.' });
+  }
+
+  // Duplicates would not corrupt the count (SQLite updates a matched row once),
+  // but de-duplicating keeps the reported id lists clean.
+  const uniqueIds = [...new Set(ids as number[])];
+  const placeholders = uniqueIds.map(() => '?').join(', ');
+
+  // Read-then-write in one transaction so the reported lists cannot disagree
+  // with what was actually written.
+  const bulkComplete = db.transaction((targets: number[]) => {
+    const found = db
+      .prepare(`SELECT id, completed FROM tasks WHERE id IN (${placeholders})`)
+      .all(...targets) as Pick<TaskRow, 'id' | 'completed'>[];
+
+    const foundIds = new Set(found.map((row) => row.id));
+    const info = db
+      .prepare(
+        `UPDATE tasks SET completed = 1 WHERE id IN (${placeholders}) AND completed = 0`,
+      )
+      .run(...targets);
+
+    return {
+      updated: info.changes,
+      alreadyCompleted: found.filter((row) => row.completed === 1).map((row) => row.id),
+      notFound: targets.filter((id) => !foundIds.has(id)),
+    };
+  });
+
+  res.json(bulkComplete(uniqueIds));
+});
+
+/**
  * PATCH /tasks/:id
  * Update any of title, completed, priority or due_date.
  */
