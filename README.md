@@ -81,12 +81,18 @@ npm install
 npm run dev
 ```
 
-The API will be available at **http://localhost:3000**.
+The API will be available at **http://localhost:3000**. Set `PORT` to use a
+different one.
 
 On startup the app:
 - creates the `data/` directory and `data/tasks.db` if they don't exist,
 - applies `schema.sql` (idempotent — safe on every start),
+- adds any column declared in `schema.sql` that an older database is missing
+  (also idempotent, so no need to delete `data/` after pulling a schema change),
 - seeds a few sample tasks **only if** the table is empty.
+
+Set `TASKS_DB_PATH` to point at a different database file. The test suite uses
+this to run against a throwaway database instead of your local one.
 
 ### Verify it works
 
@@ -97,37 +103,157 @@ curl http://localhost:3000/health
 # List all tasks (returns the seeded sample data)
 curl http://localhost:3000/tasks
 
-# Create a task
+# Create a task — priority and due_date are optional
 curl -X POST http://localhost:3000/tasks \
   -H "Content-Type: application/json" \
   -d '{"title":"Write the pull request description"}'
 
-# Update a task (title and/or completed)
+curl -X POST http://localhost:3000/tasks \
+  -H "Content-Type: application/json" \
+  -d '{"title":"Ship the release","priority":"high","due_date":"2026-08-10"}'
+
+# Update a task (any of title, completed, priority, due_date)
 curl -X PATCH http://localhost:3000/tasks/1 \
   -H "Content-Type: application/json" \
   -d '{"completed":true}'
+
+curl -X PATCH http://localhost:3000/tasks/1 \
+  -H "Content-Type: application/json" \
+  -d '{"priority":"low","due_date":"2026-09-01"}'
+
+# Clear a due date with an explicit null
+curl -X PATCH http://localhost:3000/tasks/1 \
+  -H "Content-Type: application/json" \
+  -d '{"due_date":null}'
 
 # Delete a task
 curl -X DELETE http://localhost:3000/tasks/1
 ```
 
+#### Filtering the task list
+
+`?completed` and `?priority` can be used alone or together (combined with AND):
+
+```bash
+# Only completed tasks
+curl "http://localhost:3000/tasks?completed=true"
+
+# Only open tasks
+curl "http://localhost:3000/tasks?completed=false"
+
+# Only high-priority tasks
+curl "http://localhost:3000/tasks?priority=high"
+
+# Open AND high priority
+curl "http://localhost:3000/tasks?completed=false&priority=high"
+```
+
+Invalid filter values return `400` rather than being ignored, so a typo does not
+quietly return the full list:
+
+```bash
+curl "http://localhost:3000/tasks?completed=1"
+# {"error":"Query param \"completed\" must be either \"true\" or \"false\".", ...}
+```
+
+#### Completing several tasks at once
+
+```bash
+curl -X POST http://localhost:3000/tasks/bulk-complete \
+  -H "Content-Type: application/json" \
+  -d '{"ids":[1,2,3]}'
+```
+
+```json
+{ "updated": 2, "alreadyCompleted": [1], "notFound": [] }
+```
+
+`updated` counts only the tasks that actually changed state. Ids that were
+already completed, and ids that do not exist, are listed separately — a bare
+count of `0` cannot tell those two cases apart.
+
 ### Available scripts
 
-| Script          | What it does                                  |
-| --------------- | --------------------------------------------- |
-| `npm run dev`   | Start in watch mode with `tsx` (auto-reload). |
-| `npm start`     | Start once with `tsx` (no watch).             |
-| `npm run build` | Type-check and compile to `dist/` with `tsc`. |
+| Script              | What it does                                             |
+| ------------------- | -------------------------------------------------------- |
+| `npm run dev`       | Start in watch mode with `tsx` (auto-reload).            |
+| `npm start`         | Start once with `tsx` (no watch).                        |
+| `npm run build`     | Type-check and compile `src/` to `dist/` with `tsc`.     |
+| `npm test`          | Run the test suite with the built-in `node:test` runner. |
+| `npm run typecheck` | Type-check `src/` **and** `tests/` without emitting.     |
 
-### Current API (starting point)
+### API
 
-| Method   | Path          | Description                              |
-| -------- | ------------- | ---------------------------------------- |
-| `GET`    | `/health`     | Liveness check.                          |
-| `GET`    | `/tasks`      | List all tasks.                          |
-| `POST`   | `/tasks`      | Create a task from `{ "title": "..." }`. |
-| `PATCH`  | `/tasks/:id`  | Update `title` and/or `completed`.       |
-| `DELETE` | `/tasks/:id`  | Delete a task.                           |
+| Method   | Path                   | Description                                                    |
+| -------- | ---------------------- | -------------------------------------------------------------- |
+| `GET`    | `/health`              | Liveness check.                                                |
+| `GET`    | `/tasks`               | List tasks, optionally filtered by `completed` and `priority`.  |
+| `POST`   | `/tasks`               | Create a task.                                                 |
+| `POST`   | `/tasks/bulk-complete` | Mark many tasks completed from `{ "ids": [1, 2] }`.            |
+| `PATCH`  | `/tasks/:id`           | Update `title`, `completed`, `priority` and/or `due_date`.      |
+| `DELETE` | `/tasks/:id`           | Delete a task.                                                 |
+
+#### The task shape
+
+```json
+{
+  "id": 1,
+  "title": "Ship the release",
+  "completed": false,
+  "priority": "high",
+  "due_date": "2026-08-10",
+  "created_at": "2026-08-03 17:45:11"
+}
+```
+
+| Field      | Type                            | Notes                                                             |
+| ---------- | ------------------------------- | ----------------------------------------------------------------- |
+| `title`    | non-empty string                | Required on create. Trimmed before storing.                       |
+| `completed`| boolean                         | Defaults to `false`. Set via `PATCH` or `bulk-complete`.           |
+| `priority` | `"low"` \| `"medium"` \| `"high"` | Defaults to `"medium"`.                                         |
+| `due_date` | ISO date string, or `null`      | Optional. `"2026-08-10"` or `"2026-08-10T09:00:00Z"`.             |
+
+#### Query parameters on `GET /tasks`
+
+| Param       | Accepted values          | Notes                                          |
+| ----------- | ------------------------ | ---------------------------------------------- |
+| `completed` | `true` \| `false`        | Anything else is a `400`.                      |
+| `priority`  | `low` \| `medium` \| `high` | Anything else is a `400`.                   |
+
+Both combine with AND. Unknown query params are ignored.
+
+#### Status codes
+
+| Code  | When                                                                        |
+| ----- | --------------------------------------------------------------------------- |
+| `200` | Successful `GET`, `PATCH` or `bulk-complete`.                                |
+| `201` | Task created.                                                               |
+| `204` | Task deleted (empty body).                                                  |
+| `400` | Invalid body, invalid filter value, bad `:id`, or malformed JSON.            |
+| `404` | No task with that id, or no such route.                                      |
+
+Validation errors carry a summary plus one entry per problem:
+
+```json
+{
+  "error": "Field \"priority\" must be one of: low, medium, high.",
+  "details": [
+    { "field": "priority", "message": "Field \"priority\" must be one of: low, medium, high." }
+  ]
+}
+```
+
+Request bodies reject unrecognised keys, so a typo like `"prioritee"` returns a
+`400` instead of being silently dropped.
+
+### Running the tests
+
+```bash
+npm test
+```
+
+Each run creates its own SQLite database in a temp directory, so it never
+touches `data/tasks.db`.
 
 ---
 
