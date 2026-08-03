@@ -1,6 +1,14 @@
 import { Router, type Request, type Response } from 'express';
+import type { z } from 'zod';
 import db from '../db.js';
-import { PRIORITIES, toTask, type TaskRow } from '../types.js';
+import {
+  bulkCompleteSchema,
+  createTaskSchema,
+  listTasksQuerySchema,
+  toValidationError,
+  updateTaskSchema,
+} from '../schemas.js';
+import { toTask, type TaskRow } from '../types.js';
 
 export const tasksRouter = Router();
 
@@ -18,9 +26,24 @@ function parseId(raw: string): number | null {
   return Number.isInteger(id) && id > 0 ? id : null;
 }
 
-/** Narrow an unknown value to one of the allowed priorities. */
-function isPriority(value: unknown): boolean {
-  return typeof value === 'string' && (PRIORITIES as readonly string[]).includes(value);
+/**
+ * Validate `data` against `schema`.
+ *
+ * On success returns the parsed value (defaults applied, strings trimmed). On
+ * failure it sends the 400 itself and returns null, so callers just need
+ * `if (x === null) return;` and can treat everything after that as valid.
+ */
+function parseOr400<S extends z.ZodType>(
+  schema: S,
+  data: unknown,
+  res: Response,
+): z.output<S> | null {
+  const result = schema.safeParse(data);
+  if (!result.success) {
+    res.status(400).json(toValidationError(result.error));
+    return null;
+  }
+  return result.data;
 }
 
 /**
@@ -31,34 +54,24 @@ function isPriority(value: unknown): boolean {
  *   ?completed=true|false
  *   ?priority=low|medium|high
  *
- * Unknown query params are ignored rather than rejected, so clients can pass
- * along things like cache-busting params without breaking. Filter values are
- * bound as SQL parameters — only the shape of the WHERE clause is interpolated,
- * never user input.
+ * Filter values are bound as SQL parameters — only the shape of the WHERE
+ * clause is interpolated, never user input.
  */
 tasksRouter.get('/', (req: Request, res: Response) => {
-  const { completed, priority } = req.query;
+  const query = parseOr400(listTasksQuerySchema, req.query, res);
+  if (query === null) return;
+
   const conditions: string[] = [];
   const values: (string | number)[] = [];
 
-  if (completed !== undefined) {
-    if (completed !== 'true' && completed !== 'false') {
-      return res
-        .status(400)
-        .json({ error: 'Query param "completed" must be either "true" or "false".' });
-    }
+  if (query.completed !== undefined) {
     conditions.push('completed = ?');
-    values.push(completed === 'true' ? 1 : 0);
+    values.push(query.completed === 'true' ? 1 : 0);
   }
 
-  if (priority !== undefined) {
-    if (!isPriority(priority)) {
-      return res.status(400).json({
-        error: `Query param "priority" must be one of: ${PRIORITIES.join(', ')}.`,
-      });
-    }
+  if (query.priority !== undefined) {
     conditions.push('priority = ?');
-    values.push(priority as string);
+    values.push(query.priority);
   }
 
   const where = conditions.length > 0 ? ` WHERE ${conditions.join(' AND ')}` : '';
@@ -74,44 +87,13 @@ tasksRouter.get('/', (req: Request, res: Response) => {
  * Create a task from { "title": "...", "priority"?: ..., "due_date"?: ... }.
  */
 tasksRouter.post('/', (req: Request, res: Response) => {
-  const { title, priority, due_date } = req.body ?? {};
+  const body = parseOr400(createTaskSchema, req.body ?? {}, res);
+  if (body === null) return;
 
-  if (typeof title !== 'string' || title.trim().length === 0) {
-    return res
-      .status(400)
-      .json({ error: 'Field "title" is required and must be a non-empty string.' });
-  }
-
-  if (priority !== undefined && !isPriority(priority)) {
-    return res
-      .status(400)
-      .json({ error: `Field "priority" must be one of: ${PRIORITIES.join(', ')}.` });
-  }
-
-  if (due_date !== undefined && due_date !== null && typeof due_date !== 'string') {
-    return res
-      .status(400)
-      .json({ error: 'Field "due_date" must be an ISO date string or null.' });
-  }
-
-  const info = insertStmt.run(
-    title.trim(),
-    (priority as string | undefined) ?? 'medium',
-    (due_date as string | null | undefined) ?? null,
-  );
+  const info = insertStmt.run(body.title, body.priority, body.due_date ?? null);
   const row = getStmt.get(info.lastInsertRowid) as TaskRow;
   res.status(201).json(toTask(row));
 });
-
-/**
- * Upper bound on how many ids one bulk-complete call may carry.
- *
- * SQLite refuses a statement with more than 32766 bound parameters, so an
- * unbounded list would surface as a 500. 1000 stays well clear of that while
- * being far more than this endpoint realistically needs, and callers get a
- * clear 400 instead of a crash.
- */
-const BULK_COMPLETE_MAX_IDS = 1000;
 
 /**
  * POST /tasks/bulk-complete
@@ -126,29 +108,12 @@ const BULK_COMPLETE_MAX_IDS = 1000;
  * count of 0 is ambiguous between the two.
  */
 tasksRouter.post('/bulk-complete', (req: Request, res: Response) => {
-  const { ids } = req.body ?? {};
-
-  if (!Array.isArray(ids) || ids.length === 0) {
-    return res
-      .status(400)
-      .json({ error: 'Field "ids" is required and must be a non-empty array of task ids.' });
-  }
-
-  if (ids.length > BULK_COMPLETE_MAX_IDS) {
-    return res.status(400).json({
-      error: `Field "ids" must contain at most ${BULK_COMPLETE_MAX_IDS} ids (received ${ids.length}).`,
-    });
-  }
-
-  if (!ids.every((id) => Number.isInteger(id) && id > 0)) {
-    return res
-      .status(400)
-      .json({ error: 'Field "ids" must contain only positive integers.' });
-  }
+  const body = parseOr400(bulkCompleteSchema, req.body ?? {}, res);
+  if (body === null) return;
 
   // Duplicates would not corrupt the count (SQLite updates a matched row once),
   // but de-duplicating keeps the reported id lists clean.
-  const uniqueIds = [...new Set(ids as number[])];
+  const uniqueIds = [...new Set(body.ids)];
   const placeholders = uniqueIds.map(() => '?').join(', ');
 
   // Read-then-write in one transaction so the reported lists cannot disagree
@@ -185,63 +150,27 @@ tasksRouter.patch('/:id', (req: Request, res: Response) => {
     return res.status(400).json({ error: 'Invalid task id.' });
   }
 
+  const body = parseOr400(updateTaskSchema, req.body ?? {}, res);
+  if (body === null) return;
+
   const existing = getStmt.get(id) as TaskRow | undefined;
   if (!existing) {
     return res.status(404).json({ error: `Task ${id} not found.` });
   }
 
-  const { title, completed, priority, due_date } = req.body ?? {};
   const updates: string[] = [];
   const values: (string | number | null)[] = [];
+  const set = (column: string, value: string | number | null): void => {
+    updates.push(`${column} = ?`);
+    values.push(value);
+  };
 
-  if (title !== undefined) {
-    if (typeof title !== 'string' || title.trim().length === 0) {
-      return res
-        .status(400)
-        .json({ error: 'Field "title" must be a non-empty string.' });
-    }
-    updates.push('title = ?');
-    values.push(title.trim());
-  }
-
-  if (completed !== undefined) {
-    if (typeof completed !== 'boolean') {
-      return res
-        .status(400)
-        .json({ error: 'Field "completed" must be a boolean.' });
-    }
-    updates.push('completed = ?');
-    values.push(completed ? 1 : 0);
-  }
-
-  if (priority !== undefined) {
-    if (!isPriority(priority)) {
-      return res
-        .status(400)
-        .json({ error: `Field "priority" must be one of: ${PRIORITIES.join(', ')}.` });
-    }
-    updates.push('priority = ?');
-    values.push(priority as string);
-  }
-
-  // An explicit null clears the due date; that is why this branch accepts null
-  // but the `undefined` check above still means "field not supplied".
-  if (due_date !== undefined) {
-    if (due_date !== null && typeof due_date !== 'string') {
-      return res
-        .status(400)
-        .json({ error: 'Field "due_date" must be an ISO date string or null.' });
-    }
-    updates.push('due_date = ?');
-    values.push(due_date as string | null);
-  }
-
-  if (updates.length === 0) {
-    return res.status(400).json({
-      error:
-        'Provide at least one of "title", "completed", "priority" or "due_date" to update.',
-    });
-  }
+  if (body.title !== undefined) set('title', body.title);
+  if (body.completed !== undefined) set('completed', body.completed ? 1 : 0);
+  if (body.priority !== undefined) set('priority', body.priority);
+  // `in` rather than an undefined check: an explicit null clears the due date,
+  // while an absent key means "leave unchanged".
+  if ('due_date' in body) set('due_date', body.due_date ?? null);
 
   values.push(id);
   db.prepare(`UPDATE tasks SET ${updates.join(', ')} WHERE id = ?`).run(...values);
