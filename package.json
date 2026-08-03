@@ -6,7 +6,9 @@
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "start": "tsx src/index.ts",
-    "build": "tsc"
+    "build": "tsc",
+    "test": "tsx --test tests/tasks.test.ts",
+    "typecheck": "tsc --noEmit -p tsconfig.test.json"
   },
   "dependencies": {
     "better-sqlite3": "^11.8.1",
