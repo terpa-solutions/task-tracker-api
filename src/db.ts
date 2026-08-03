@@ -36,6 +36,35 @@ function applySchema(): void {
 }
 
 /**
+ * Bring an already-existing `tasks` table up to date with `schema.sql`.
+ *
+ * `schema.sql` uses `CREATE TABLE IF NOT EXISTS`, so on a database created by
+ * an older version of this app the statement is a no-op and newly declared
+ * columns would never appear. Databases predate code changes, so we add any
+ * missing column explicitly.
+ *
+ * Adding a column is driven by `PRAGMA table_info`, which makes this safe to
+ * run on every start: existing rows pick up the column default (`'medium'` for
+ * priority, `NULL` for due_date) and a second run finds nothing to do.
+ */
+function migrate(): void {
+  const columns = db.prepare('PRAGMA table_info(tasks)').all() as { name: string }[];
+  const existing = new Set(columns.map((column) => column.name));
+
+  const additions: Record<string, string> = {
+    priority: "ALTER TABLE tasks ADD COLUMN priority TEXT NOT NULL DEFAULT 'medium' CHECK (priority IN ('low', 'medium', 'high'))",
+    due_date: 'ALTER TABLE tasks ADD COLUMN due_date TEXT',
+  };
+
+  for (const [column, statement] of Object.entries(additions)) {
+    if (!existing.has(column)) {
+      db.exec(statement);
+      console.log(`🛠️  Migrated: added column "${column}" to tasks`);
+    }
+  }
+}
+
+/**
  * Seed sample data, but only when the tasks table is empty. This gives a fresh
  * clone immediate data to play with without duplicating rows on restart.
  */
@@ -51,6 +80,7 @@ function seedIfEmpty(): void {
 }
 
 applySchema();
+migrate();
 seedIfEmpty();
 
 export default db;

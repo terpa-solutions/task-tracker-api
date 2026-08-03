@@ -1,19 +1,26 @@
 import { Router, type Request, type Response } from 'express';
 import db from '../db.js';
-import { toTask, type TaskRow } from '../types.js';
+import { PRIORITIES, toTask, type TaskRow } from '../types.js';
 
 export const tasksRouter = Router();
 
 // Prepared statements (compiled once, reused per request).
 const listStmt = db.prepare('SELECT * FROM tasks ORDER BY id ASC');
 const getStmt = db.prepare('SELECT * FROM tasks WHERE id = ?');
-const insertStmt = db.prepare('INSERT INTO tasks (title) VALUES (?)');
+const insertStmt = db.prepare(
+  'INSERT INTO tasks (title, priority, due_date) VALUES (?, ?, ?)',
+);
 const deleteStmt = db.prepare('DELETE FROM tasks WHERE id = ?');
 
 /** Parse and validate a route `:id` param, returning null when invalid. */
 function parseId(raw: string): number | null {
   const id = Number(raw);
   return Number.isInteger(id) && id > 0 ? id : null;
+}
+
+/** Narrow an unknown value to one of the allowed priorities. */
+function isPriority(value: unknown): boolean {
+  return typeof value === 'string' && (PRIORITIES as readonly string[]).includes(value);
 }
 
 /**
@@ -27,10 +34,10 @@ tasksRouter.get('/', (_req: Request, res: Response) => {
 
 /**
  * POST /tasks
- * Create a task from { "title": "..." }.
+ * Create a task from { "title": "...", "priority"?: ..., "due_date"?: ... }.
  */
 tasksRouter.post('/', (req: Request, res: Response) => {
-  const { title } = req.body ?? {};
+  const { title, priority, due_date } = req.body ?? {};
 
   if (typeof title !== 'string' || title.trim().length === 0) {
     return res
@@ -38,14 +45,30 @@ tasksRouter.post('/', (req: Request, res: Response) => {
       .json({ error: 'Field "title" is required and must be a non-empty string.' });
   }
 
-  const info = insertStmt.run(title.trim());
+  if (priority !== undefined && !isPriority(priority)) {
+    return res
+      .status(400)
+      .json({ error: `Field "priority" must be one of: ${PRIORITIES.join(', ')}.` });
+  }
+
+  if (due_date !== undefined && due_date !== null && typeof due_date !== 'string') {
+    return res
+      .status(400)
+      .json({ error: 'Field "due_date" must be an ISO date string or null.' });
+  }
+
+  const info = insertStmt.run(
+    title.trim(),
+    (priority as string | undefined) ?? 'medium',
+    (due_date as string | null | undefined) ?? null,
+  );
   const row = getStmt.get(info.lastInsertRowid) as TaskRow;
   res.status(201).json(toTask(row));
 });
 
 /**
  * PATCH /tasks/:id
- * Update the title and/or completed state of a task.
+ * Update any of title, completed, priority or due_date.
  */
 tasksRouter.patch('/:id', (req: Request, res: Response) => {
   const id = parseId(req.params.id);
@@ -58,9 +81,9 @@ tasksRouter.patch('/:id', (req: Request, res: Response) => {
     return res.status(404).json({ error: `Task ${id} not found.` });
   }
 
-  const { title, completed } = req.body ?? {};
+  const { title, completed, priority, due_date } = req.body ?? {};
   const updates: string[] = [];
-  const values: (string | number)[] = [];
+  const values: (string | number | null)[] = [];
 
   if (title !== undefined) {
     if (typeof title !== 'string' || title.trim().length === 0) {
@@ -82,10 +105,33 @@ tasksRouter.patch('/:id', (req: Request, res: Response) => {
     values.push(completed ? 1 : 0);
   }
 
+  if (priority !== undefined) {
+    if (!isPriority(priority)) {
+      return res
+        .status(400)
+        .json({ error: `Field "priority" must be one of: ${PRIORITIES.join(', ')}.` });
+    }
+    updates.push('priority = ?');
+    values.push(priority as string);
+  }
+
+  // An explicit null clears the due date; that is why this branch accepts null
+  // but the `undefined` check above still means "field not supplied".
+  if (due_date !== undefined) {
+    if (due_date !== null && typeof due_date !== 'string') {
+      return res
+        .status(400)
+        .json({ error: 'Field "due_date" must be an ISO date string or null.' });
+    }
+    updates.push('due_date = ?');
+    values.push(due_date as string | null);
+  }
+
   if (updates.length === 0) {
-    return res
-      .status(400)
-      .json({ error: 'Provide at least one of "title" or "completed" to update.' });
+    return res.status(400).json({
+      error:
+        'Provide at least one of "title", "completed", "priority" or "due_date" to update.',
+    });
   }
 
   values.push(id);
