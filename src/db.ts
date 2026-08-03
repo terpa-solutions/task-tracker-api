@@ -11,13 +11,21 @@ import { fileURLToPath } from 'node:url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const projectRoot = path.resolve(__dirname, '..');
 
-const dataDir = path.join(projectRoot, 'data');
-const dbPath = path.join(dataDir, 'tasks.db');
 const schemaPath = path.join(projectRoot, 'schema.sql');
 const seedPath = path.join(projectRoot, 'seed.sql');
 
-// Ensure the data/ directory exists before opening the database file.
-fs.mkdirSync(dataDir, { recursive: true });
+/**
+ * Where the database file lives.
+ *
+ * Defaults to `data/tasks.db` at the project root. `TASKS_DB_PATH` overrides it
+ * so the test suite can point at a throwaway file per run instead of mutating
+ * the database you have been poking at by hand — a test that wipes your dev
+ * data is a test you stop running.
+ */
+const dbPath = process.env.TASKS_DB_PATH ?? path.join(projectRoot, 'data', 'tasks.db');
+
+// Ensure the parent directory exists before opening the database file.
+fs.mkdirSync(path.dirname(dbPath), { recursive: true });
 
 // Open (or create) the SQLite database file.
 export const db: DatabaseType = new Database(dbPath);
