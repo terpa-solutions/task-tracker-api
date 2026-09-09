@@ -22,11 +22,11 @@ was to preserve that file and explain the differences when preparing the PR.
 Current documentation is delivered separately; this is not presented as literal
 completion of the original README editing requirement.
 
-**PR preparation, not yet published:** explain the separate documentation,
-multiple filter selections, consistent listing object, agreed date format,
-ID limit, seeding behavior, and environment choice. The local
-[PULL_REQUEST_DRAFT.md](PULL_REQUEST_DRAFT.md) has been reviewed for the now
-authorized publication phase. These notes do not create or publish a PR.
+**Published [PR #2](https://github.com/terpa-solutions/task-tracker-api/pull/2):**
+the description explains the separate documentation, multiple filter selections,
+consistent listing object, agreed date format, ID limit, seeding behavior, and
+environment choice. [PULL_REQUEST_DRAFT.md](PULL_REQUEST_DRAFT.md) retains the
+description locally. The PR is open; publication does not imply upstream approval.
 
 ## Adopted environment and dependencies
 
@@ -194,7 +194,7 @@ Coverage in [database-update.test.ts](../tests/database-update.test.ts):
 "valida default, NOT NULL, CHECK real y collation de priority, incluso sin filas"
 and "acepta la forma CHECK soportada con identificador citado, orden distinto y default entre paréntesis".
 
-## Verification and outstanding work
+## Verification and delivery status
 
 The final working-project results are recorded in
 [LOCAL_VERIFICATION.md](LOCAL_VERIFICATION.md): the full regression suite,
@@ -211,21 +211,19 @@ Regular HTTP tests use temporary databases. Startup, restart, import-side-effect
 local-date, and CLI checks retain separate processes where isolation is needed.
 The linked test names identify coverage without relying only on a test count.
 
-Outstanding work is tracked in [WORK_PLAN.md](../WORK_PLAN.md):
+Completed delivery steps are tracked in [WORK_PLAN.md](../WORK_PLAN.md):
 
 - **Activity 6:** the authorized dependency proposal is applied in this
   local closure. Express 4.22.2 and its direct range remain unchanged;
   `overrides: { express: { qs: '6.16.0' } }` selects patched qs, and body-parser
   resolves to 1.20.8. Node and better-sqlite3 remain unchanged. Final execution
   results and any remaining limits belong in LOCAL_VERIFICATION.md.
-- **Activity 5:** the user has now authorized publication. The English
-  [PULL_REQUEST_DRAFT.md](PULL_REQUEST_DRAFT.md) and deliverable files have been
-  reviewed. Prepare the fork, remotes, branch, and signing; create
-  signed/verified commits and publish a PR to
-  terpa-solutions/task-tracker-api:main. Record each result in WORK_PLAN.md
-  only after verifying the corresponding publication step.
-  Explain the differences above, their rationale, and proportionate future
-  scaling proposals without presenting those proposals as implemented features.
+- **Activity 5:** published [PR #2](https://github.com/terpa-solutions/task-tracker-api/pull/2)
+  from `isaac12odin:codex/task-tracker-api-delivery` to upstream `main` with a
+  verified signed delivery commit. The reviewed English description explains
+  the differences above, their rationale, verification, limits, and proportionate
+  future scaling proposals without presenting those proposals as implemented
+  features. Upstream review and merge are separate from this completed publication.
 
 **Optional proposal, not a requirement or blocker:** add an npm test alias.
 The current checks are npm run test:db, npm run build, and npm run typecheck;

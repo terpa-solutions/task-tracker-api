@@ -262,10 +262,11 @@ RN-DOC-01/RN-DOC-02, J-10, and J-14: keep documentation and the plan consistent,
 group outstanding work, and do not present superseded history as current decisions.
 RN-TEST-01: retain automated filter and bulk coverage, as well as regressions.
 RN-ENT-01: deliver a PR from a fork to main with signed/verified commits.
-Activity 5 is now authorized by the user's publication instruction. The English
-PR draft and deliverable file set have been reviewed. Fork setup, branch,
-signed commits, publication, and PR creation require verified execution results
-before they can be marked complete in WORK_PLAN.md.
+Activity 5 was completed under the user's publication instruction using the
+selected isaac12odin account. The English description and deliverable files
+were reviewed; the delivery commit has a verified GitHub signature, and PR #2
+is open from the fork to upstream main. WORK_PLAN.md links the verified results.
+Publication does not imply upstream approval or merge.
 The user authorized the exact Activity 6 correction: keep Express 4.22.2,
 Node >=20, and better-sqlite3 11.10.0; install body-parser 1.20.8 and qs 6.16.0
 with the qs override scoped under Express. Broader upgrades are outside this work.

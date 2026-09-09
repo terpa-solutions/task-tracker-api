@@ -1,11 +1,12 @@
-# Pull request draft
+# Pull request description and publication record
 
-Proposed title: **Add validated task fields, combined filters, and atomic bulk completion**
+Title: **Add validated task fields, combined filters, and atomic bulk completion**
 
-Status: **reviewed description ready for publication**. The user has authorized
-signed commits and a cross-fork PR. The local technical verification remains
-separate from fork setup, signing, push, and PR creation, whose results are
-tracked in [WORK_PLAN.md](../WORK_PLAN.md).
+Status: **published as [PR #2](https://github.com/terpa-solutions/task-tracker-api/pull/2)**
+by `isaac12odin`, from `codex/task-tracker-api-delivery` to upstream `main`.
+The delivery commit has a verified GitHub signature. The PR is open; upstream
+review and merge are separate. Publication results are tracked in
+[WORK_PLAN.md](../WORK_PLAN.md), independently of the local technical checks.
 
 ## Problem and resulting behavior
 
@@ -120,6 +121,6 @@ These are proposals, not implemented features or new conditions for this ticket.
 ## Publication execution checklist
 
 - [x] Review this description and the complete deliverable file set, including compatibility differences and exclusion of local data, runtimes, and logs.
-- [ ] Prepare the fork, remotes, delivery branch, and commit-signing identity under the user's publication instruction.
-- [ ] Exclude working databases, backups, portable runtimes, and local logs; create and verify signed commits.
-- [ ] Publish the approved branch and open the PR against `terpa-solutions/task-tracker-api:main`.
+- [x] Prepare the `isaac12odin/task-tracker-api` fork, remotes, delivery branch, and commit-signing identity under the user's publication instruction.
+- [x] Exclude working databases, backups, portable runtimes, and local logs; create and verify the signed delivery commit.
+- [x] Publish the approved branch and open [PR #2](https://github.com/terpa-solutions/task-tracker-api/pull/2) against `terpa-solutions/task-tracker-api:main`.

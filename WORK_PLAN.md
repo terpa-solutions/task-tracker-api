@@ -1,9 +1,11 @@
-# Remaining activities — Task Tracker API
+# Delivery status — Task Tracker API
 
 The technical closure is verified locally. Results and limits are in
 [LOCAL_VERIFICATION.md](docs/LOCAL_VERIFICATION.md). The original activity numbers
-are retained. The user has now authorized the separate publication phase:
-signed commits and a cross-fork PR against `terpa-solutions/task-tracker-api:main`.
+are retained. The separately authorized publication is complete:
+[PR #2](https://github.com/terpa-solutions/task-tracker-api/pull/2) is open from
+`isaac12odin:codex/task-tracker-api-delivery` to
+`terpa-solutions/task-tracker-api:main`. Upstream review and merge remain separate.
 
 ## Completed local technical closure, including Activity 6
 
@@ -17,15 +19,17 @@ The verified short-path project copy remains at `C:\tt-check\run-dRExpm` because
 automatic command review blocked its deletion. Its temporary database files
 were cleaned up; this retained copy does not alter the working database.
 
-## Activity 5. Publication — authorized and in progress
+## Activity 5. Publication — completed
 
 - [x] Review the [English PR draft](docs/PULL_REQUEST_DRAFT.md): what changed, why, how, verification, compatibility differences, limits, and justified future scaling proposals.
 - [x] Review the final deliverable file set before publication; confirm working data, backups, local runtimes, and logs are excluded.
 - [x] Confirm the fork `isaac12odin/task-tracker-api`, `origin`/`upstream` remotes, branch `codex/task-tracker-api-delivery`, and authenticated `isaac12odin` identity. Use GitHub's automatic commit signing and verify its result.
-- [ ] Create and verify signed commits after reviewing the final content.
-- [ ] Publish the reviewed branch and open the cross-fork pull request toward `terpa-solutions/task-tracker-api:main` under the user's publication instruction.
+- [x] Create and verify the signed delivery commit after reviewing the final content: [3b86baf](https://github.com/isaac12odin/task-tracker-api/commit/3b86bafc7d04de8556f624eb60ca6c364db39bd8), authored by `isaac12odin`, with GitHub signature status `verified: true`, reason `valid`.
+- [x] Publish the reviewed branch and open [PR #2](https://github.com/terpa-solutions/task-tracker-api/pull/2) toward `terpa-solutions/task-tracker-api:main` under the user's publication instruction. Verify the destination, author, head, and prepared description.
 
 No Git commands, GitHub queries, commits, branch publication, or PR creation were
-performed during the local technical closure. The later publication phase is
-authorized separately; fork setup, signing, push, and PR creation remain pending
-until their actual results are verified.
+performed during the local technical closure. Fork setup, signed commit creation,
+branch publication, and PR creation were performed afterward under the separate
+authorization. The published delivery tree matches the reviewed staged files.
+Databases, backups, portable runtimes, and local logs are excluded. Publication
+does not imply upstream approval or merge.

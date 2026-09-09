@@ -150,7 +150,8 @@ integrated HTTP/SQLite and example verification using isolated databases.
 scope of changed packages, and working-data preservation. Do not substitute
 the historical zero-alert candidate audit for the final installed audit.
 
-[PULL_REQUEST_DRAFT.md](PULL_REQUEST_DRAFT.md) has been reviewed for publication.
+[PULL_REQUEST_DRAFT.md](PULL_REQUEST_DRAFT.md) records the published description.
 Fork setup, signed commits, branch publication, and PR creation were outside the
-completed local technical closure. The user has since authorized that separate
-publication phase; its execution status is tracked in [WORK_PLAN.md](../WORK_PLAN.md).
+completed local technical closure. The user subsequently authorized that separate
+phase, completed with [PR #2](https://github.com/terpa-solutions/task-tracker-api/pull/2).
+Verified publication results are tracked in [WORK_PLAN.md](../WORK_PLAN.md).
