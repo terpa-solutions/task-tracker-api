@@ -2,6 +2,7 @@ import Database, { type Database as DatabaseType } from 'better-sqlite3';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { assertTaskIds, assertTaskSchema } from './database-contract.js';
 
 /**
  * Resolve the project root from this file's location (src/db.ts lives one
@@ -11,46 +12,38 @@ import { fileURLToPath } from 'node:url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const projectRoot = path.resolve(__dirname, '..');
 
-const dataDir = path.join(projectRoot, 'data');
-const dbPath = path.join(dataDir, 'tasks.db');
-const schemaPath = path.join(projectRoot, 'schema.sql');
-const seedPath = path.join(projectRoot, 'seed.sql');
-
-// Ensure the data/ directory exists before opening the database file.
-fs.mkdirSync(dataDir, { recursive: true });
-
-// Open (or create) the SQLite database file.
-export const db: DatabaseType = new Database(dbPath);
-
-// Recommended pragmas for a local, single-file app.
-db.pragma('journal_mode = WAL');
-db.pragma('foreign_keys = ON');
-
-/**
- * Apply the schema on every start. `schema.sql` uses `CREATE TABLE IF NOT
- * EXISTS`, so this is safe to run repeatedly.
- */
-function applySchema(): void {
-  const schema = fs.readFileSync(schemaPath, 'utf-8');
-  db.exec(schema);
+interface DatabaseOptions {
+  filename?: string;
+  schemaPath?: string;
+  seedPath?: string;
 }
 
-/**
- * Seed sample data, but only when the tasks table is empty. This gives a fresh
- * clone immediate data to play with without duplicating rows on restart.
- */
-function seedIfEmpty(): void {
-  const { count } = db.prepare('SELECT COUNT(*) AS count FROM tasks').get() as {
-    count: number;
-  };
-
-  if (count === 0) {
-    const seed = fs.readFileSync(seedPath, 'utf-8');
-    db.exec(seed);
+/** Open and initialize only when called. The caller owns closing the connection. */
+export function openDatabase({
+  filename = path.join(projectRoot, 'data', 'tasks.db'),
+  schemaPath = path.join(projectRoot, 'schema.sql'),
+  seedPath = path.join(projectRoot, 'seed.sql'),
+}: DatabaseOptions = {}): DatabaseType {
+  if (filename !== ':memory:') fs.mkdirSync(path.dirname(filename), { recursive: true });
+  const db = new Database(filename);
+  try {
+    db.pragma('journal_mode = WAL');
+    db.pragma('foreign_keys = ON');
+    db.transaction(() => {
+      // Existing empty tables retain their rows and AUTOINCREMENT sequence.
+      const tasksTableExisted = db.prepare(
+        "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'tasks' COLLATE NOCASE",
+      ).get() !== undefined;
+      db.exec(fs.readFileSync(schemaPath, 'utf-8'));
+      // Validate before seeding, so a legacy or incompatible database stays intact.
+      assertTaskSchema(db);
+      assertTaskIds(db);
+      if (!tasksTableExisted) db.exec(fs.readFileSync(seedPath, 'utf-8'));
+      assertTaskIds(db);
+    })();
+    return db;
+  } catch (error) {
+    db.close();
+    throw error;
   }
 }
-
-applySchema();
-seedIfEmpty();
-
-export default db;

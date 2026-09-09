@@ -3,14 +3,22 @@
   "version": "1.0.0",
   "description": "A small Task Tracker REST API used as a live coding interview exercise for agentic engineering.",
   "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "start": "tsx src/index.ts",
-    "build": "tsc"
+    "build": "tsc",
+    "typecheck": "tsc -p tsconfig.tests.json",
+    "db:update": "tsx src/scripts/update-database.ts",
+    "test:db": "node --import tsx --test tests/database-update.test.ts tests/api-safety.test.ts tests/error-handler.test.ts tests/task-validation.test.ts"
   },
   "dependencies": {
     "better-sqlite3": "^11.8.1",
-    "express": "^4.21.2"
+    "express": "^4.21.2",
+    "jsonc-parser": "3.3.1",
+    "zod": "4.5.4"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.12",
@@ -18,5 +26,10 @@
     "@types/node": "^22.10.7",
     "tsx": "^4.19.2",
     "typescript": "^5.7.3"
+  },
+  "overrides": {
+    "express": {
+      "qs": "6.16.0"
+    }
   }
 }
