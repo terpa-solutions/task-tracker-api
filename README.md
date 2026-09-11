@@ -86,7 +86,11 @@ The API will be available at **http://localhost:3000**.
 On startup the app:
 - creates the `data/` directory and `data/tasks.db` if they don't exist,
 - applies `schema.sql` (idempotent — safe on every start),
+- adds any columns missing from an older database file (also idempotent),
 - seeds a few sample tasks **only if** the table is empty.
+
+Set `DATABASE_PATH` to use a different file, or `:memory:` for a throwaway
+database that disappears on exit. The test suite uses this.
 
 ### Verify it works
 
@@ -97,18 +101,52 @@ curl http://localhost:3000/health
 # List all tasks (returns the seeded sample data)
 curl http://localhost:3000/tasks
 
-# Create a task
+# Fetch a single task
+curl http://localhost:3000/tasks/1
+
+# Filter: only pending tasks
+curl 'http://localhost:3000/tasks?completed=false'
+
+# Filter: only high-priority tasks
+curl 'http://localhost:3000/tasks?priority=high'
+
+# Filters combine (pending AND high priority)
+curl 'http://localhost:3000/tasks?completed=false&priority=high'
+
+# Create a task (priority defaults to "medium", due_date to null)
 curl -X POST http://localhost:3000/tasks \
   -H "Content-Type: application/json" \
   -d '{"title":"Write the pull request description"}'
 
-# Update a task (title and/or completed)
+# Create a task with the optional fields
+curl -X POST http://localhost:3000/tasks \
+  -H "Content-Type: application/json" \
+  -d '{"title":"Ship the ticket","priority":"high","due_date":"2026-09-30"}'
+
+# Update a task (any subset of title, completed, priority, due_date)
 curl -X PATCH http://localhost:3000/tasks/1 \
   -H "Content-Type: application/json" \
-  -d '{"completed":true}'
+  -d '{"completed":true,"priority":"low"}'
+
+# Clear a due date by setting it to null
+curl -X PATCH http://localhost:3000/tasks/1 \
+  -H "Content-Type: application/json" \
+  -d '{"due_date":null}'
+
+# Complete several tasks at once
+curl -X POST http://localhost:3000/tasks/bulk-complete \
+  -H "Content-Type: application/json" \
+  -d '{"ids":[1,2,3]}'
+# -> {"updated":2}   (ids that do not exist, or were already completed, are skipped)
 
 # Delete a task
 curl -X DELETE http://localhost:3000/tasks/1
+
+# Invalid input returns 400 with the offending field
+curl -X POST http://localhost:3000/tasks \
+  -H "Content-Type: application/json" \
+  -d '{"title":"Nope","priority":"urgent"}'
+# -> {"error":"Invalid request.","details":["priority: Invalid option: expected one of \"low\"|\"medium\"|\"high\""]}
 ```
 
 ### Available scripts
@@ -118,16 +156,36 @@ curl -X DELETE http://localhost:3000/tasks/1
 | `npm run dev`   | Start in watch mode with `tsx` (auto-reload). |
 | `npm start`     | Start once with `tsx` (no watch).             |
 | `npm run build` | Type-check and compile to `dist/` with `tsc`. |
+| `npm test`      | Run the test suite with Node's built-in runner. |
 
-### Current API (starting point)
+### Current API
 
-| Method   | Path          | Description                              |
-| -------- | ------------- | ---------------------------------------- |
-| `GET`    | `/health`     | Liveness check.                          |
-| `GET`    | `/tasks`      | List all tasks.                          |
-| `POST`   | `/tasks`      | Create a task from `{ "title": "..." }`. |
-| `PATCH`  | `/tasks/:id`  | Update `title` and/or `completed`.       |
-| `DELETE` | `/tasks/:id`  | Delete a task.                           |
+| Method   | Path                   | Description                                                        |
+| -------- | ---------------------- | ------------------------------------------------------------------ |
+| `GET`    | `/health`              | Liveness check.                                                    |
+| `GET`    | `/tasks`               | List tasks. Optional `?completed=true\|false` and `?priority=low\|medium\|high`, combinable. |
+| `GET`    | `/tasks/:id`           | Fetch a single task.                                               |
+| `POST`   | `/tasks`               | Create a task from `{ "title", "priority"?, "due_date"? }`.        |
+| `POST`   | `/tasks/bulk-complete` | Mark `{ "ids": number[] }` as completed. Returns `{ "updated": n }`. |
+| `PATCH`  | `/tasks/:id`           | Update any subset of `title`, `completed`, `priority`, `due_date`.  |
+| `DELETE` | `/tasks/:id`           | Delete a task.                                                     |
+
+#### Task fields
+
+| Field        | Type                          | Notes                                                      |
+| ------------ | ----------------------------- | ---------------------------------------------------------- |
+| `id`         | number                        | Assigned by the database.                                  |
+| `title`      | string                        | Required, non-empty; surrounding whitespace is trimmed.    |
+| `completed`  | boolean                       | Defaults to `false`.                                       |
+| `created_at` | string                        | Set by the database, returned as UTC ISO-8601 (`2026-09-30T12:00:00Z`). |
+| `priority`   | `"low" \| "medium" \| "high"` | Defaults to `"medium"`.                                    |
+| `due_date`   | string \| null                | `YYYY-MM-DD`, validated against the calendar. Optional; send `null` to clear it. |
+
+Invalid input returns `400` as `{ "error": "Invalid request.", "details": [...] }`,
+where each entry names the field that failed.
+
+`bulk-complete` counts only tasks that actually changed: ids that do not exist,
+and tasks that were already completed, are skipped and not included in `updated`.
 
 ---
 
