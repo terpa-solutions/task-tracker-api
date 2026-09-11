@@ -11,13 +11,21 @@ import { fileURLToPath } from 'node:url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const projectRoot = path.resolve(__dirname, '..');
 
-const dataDir = path.join(projectRoot, 'data');
-const dbPath = path.join(dataDir, 'tasks.db');
 const schemaPath = path.join(projectRoot, 'schema.sql');
 const seedPath = path.join(projectRoot, 'seed.sql');
 
-// Ensure the data/ directory exists before opening the database file.
-fs.mkdirSync(dataDir, { recursive: true });
+/**
+ * Where the database lives. `DATABASE_PATH` lets tests point at a throwaway
+ * file or `:memory:` instead of the developer's real database.
+ */
+export const dbPath =
+  process.env.DATABASE_PATH ?? path.join(projectRoot, 'data', 'tasks.db');
+
+// Ensure the parent directory exists before opening the file. `:memory:` is
+// not a path, so there is nothing to create.
+if (dbPath !== ':memory:') {
+  fs.mkdirSync(path.dirname(dbPath), { recursive: true });
+}
 
 // Open (or create) the SQLite database file.
 export const db: DatabaseType = new Database(dbPath);
@@ -36,6 +44,29 @@ function applySchema(): void {
 }
 
 /**
+ * Add columns introduced after the initial release. `schema.sql` only runs
+ * `CREATE TABLE IF NOT EXISTS`, so a database file created before those columns
+ * existed would otherwise keep the old shape and every query would fail.
+ * Checking `PRAGMA table_info` first keeps this safe to run on every start.
+ */
+function migrate(): void {
+  const columns = db.prepare('PRAGMA table_info(tasks)').all() as { name: string }[];
+  const existing = new Set(columns.map((column) => column.name));
+
+  if (!existing.has('priority')) {
+    db.exec(
+      "ALTER TABLE tasks ADD COLUMN priority TEXT NOT NULL DEFAULT 'medium' CHECK (priority IN ('low', 'medium', 'high'))",
+    );
+  }
+
+  if (!existing.has('due_date')) {
+    db.exec(
+      "ALTER TABLE tasks ADD COLUMN due_date TEXT CHECK (due_date IS NULL OR due_date GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]')",
+    );
+  }
+}
+
+/**
  * Seed sample data, but only when the tasks table is empty. This gives a fresh
  * clone immediate data to play with without duplicating rows on restart.
  */
@@ -51,6 +82,7 @@ function seedIfEmpty(): void {
 }
 
 applySchema();
+migrate();
 seedIfEmpty();
 
 export default db;
