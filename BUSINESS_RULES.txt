@@ -1,0 +1,278 @@
+CURRENT BUSINESS RULES — TASK TRACKER API
+
+This document contains only decisions that are currently in effect.
+The original ticket remains in README.md at the user's request.
+The implemented contract is documented in docs/HTTP_CONTRACT.md; implementation
+decisions are in docs/TECHNICAL_DECISIONS.md. The complete previous document,
+including superseded decisions and historical status, is preserved in
+docs/DECISION_HISTORY.txt and is not a source of current rules.
+WORK_PLAN.md lists outstanding work; resolved decisions are not reopened.
+Quoted Spanish user statements and exact test names remain verbatim as evidence.
+
+1. GET /tasks — LISTING AND FILTERS
+
+RN-FIL-01 through RN-FIL-06. Selection
+- completed accepts true, false, or both; priority accepts low, medium, and high.
+- Each parameter appears only once. Single values and comma-separated lists
+  are valid. Values within one filter use OR; completed and priority use AND.
+- Without filters, return every task in ascending ID order. Selecting every
+  status and priority produces the same result.
+- The user's six examples remain valid:
+  /tasks
+  /tasks?priority=low,medium
+  /tasks?priority=low,high
+  /tasks?priority=medium,high
+  /tasks?completed=false&priority=low,high
+  /tasks?completed=true,false&priority=low,medium,high
+- Source: the user's requested table and subsequent validation approval.
+
+RN-FIL-07 through RN-FIL-09. Reject invalid queries entirely
+- Return HTTP 400 for unknown values, empty values, spaces, uppercase values,
+  extra commas, unknown parameters, arrays, objects, or repetitions.
+- Repeating a value within a list or repeating a parameter is also an error.
+  Do not trim, correct, or apply the valid part of an invalid query.
+- Report one error per field: completed, priority, then unknown fields ordered
+  by name. English messages explain how to supply valid query parameters.
+- Explicit source: "y informar como es llenado" and approval of all four points.
+
+RN-FIL-10 and RN-FIL-11. Consistent response
+- Return HTTP 200 with tasks as an array and message as null when results exist.
+- Without matches, including an empty table:
+  {"tasks":[],"message":"No matching tasks found."}
+- Clients read response.tasks. This object replaces the former direct array.
+- Approval: "lo apruebo". Presented and accepted rationale: always read the same
+  structure instead of alternating between an array and an object by result count.
+
+Coverage in tests/api-safety.test.ts:
+- "GET aplica las seis consultas de filtros y sus resultados coinciden con SQLite".
+- "GET distingue valores duplicados de parámetros repetidos aunque sean iguales".
+- "GET informa todos los campos inválidos en el orden acordado antes de consultar el modelo".
+- "GET sin filtros conserva el mismo contrato cuando la tabla está vacía".
+
+2. POST /tasks — CREATION
+
+RN-VAL-01 and G-04 decisions. Body and fields
+- Require a JSON object with title; allow only title, priority, and due_date.
+- title must be nonempty text after trimming surrounding whitespace.
+- Reject completed, id, created_at, and every other property.
+- Invalid input returns 400 before insertion. No partial writes are allowed.
+- Valid creation returns 201 with the task read from SQLite; completed is false.
+
+RN-PRI-01 through RN-PRI-06. Priority
+- Exact catalog: low, medium, high. Only omitting priority applies medium in POST.
+- null, "", spaces, different casing, surrounding spaces, and other types
+  return 400. A supplied priority is neither corrected nor normalized.
+- J-02: delimit the default value and explain what a valid input requires.
+- J-03: for "HIGH" or " high ", the user specified that only "high" is valid.
+
+RN-DUE-01 through RN-DUE-07, RN-DUE-09, and RN-DUE-14. Absence during creation
+- due_date is optional. Omitting it or sending null, "", or only ASCII spaces
+  stores SQL NULL and returns JSON null.
+- Tabs, line breaks, and other whitespace are not equivalent to an empty value.
+- J-05: "puede enviar null o dejarlo en blanco el campo al final es opcional".
+
+RN-ID-01 and RN-ID-02. Capacity
+- Public numeric IDs range from 1 through 500000, inclusive, without rounding.
+- If creation would exceed 500000, return 400 without creating a task or changing
+  the sequence. Check the greatest existing ID and sequence in the transaction.
+- Deleting a task does not reset AUTOINCREMENT or release previous numbers.
+- J-11: the user requested a reasonable limit, chose "500000", and chose HTTP 400.
+
+Coverage in tests/api-safety.test.ts:
+- "POST aplica medium y NULL únicamente según las entradas de ausencia aprobadas".
+- "POST y PATCH rechazan todas las variantes inválidas de priority sin escrituras".
+- "crea hasta 500000 y devuelve 400 sin cambiar filas o secuencia al agotar el rango".
+
+3. PATCH /tasks/:id — UPDATE
+
+RN-UPD-01 and G-04 decisions. Partial update with complete validation
+- Allow only title, completed, priority, and due_date.
+- Preserve omitted fields. title retains creation validation; completed accepts
+  only booleans; priority retains its exact catalog.
+- Reject an empty object and unknown properties with 400.
+- Validate the route ID, then task existence, then the already parsed body.
+  Invalid ID: 400. Missing task: 404. Valid update: 200 with the task.
+- Reject the entire request when it contains both valid and invalid fields.
+- Approved rationale: prevent partial changes and detect misspelled field names.
+
+RN-DUE-06, RN-DUE-08, RN-DUE-09, and RN-DUE-10. Change or preserve the date
+- Omitting due_date preserves its value, even if the date is now in the past.
+- null or "" remove the date immediately: SQL NULL and JSON null.
+- Only ASCII spaces returns 400 and preserves the entire task.
+- J-06: sending due_date expresses a deliberate change; omit the field to leave
+  it unaffected. The user confirmed immediate removal and required the expected
+  notation when the request supplies only spaces.
+- The earlier decision to preserve the date when sending "" was superseded.
+
+Coverage in tests/api-safety.test.ts:
+- "PATCH conserva campos omitidos y fechas históricas, y null o cadena vacía eliminan la fecha".
+- "PATCH mixto inválido no aplica ninguno de los cambios ni activa escrituras".
+- "los cuerpos JSON no objeto y PATCH vacío devuelven el contrato de error body".
+
+4. POST AND PATCH — EXPLICIT DATE
+
+RN-DUE-02 through RN-DUE-04. Agreed representation
+- Exact format YYYY-MM-DD HH:mm:ss: one space and whole seconds.
+- Require a valid calendar date and time; do not normalize impossible dates.
+- Reject T, time zones, fractional seconds, surrounding spaces, tabs, line
+  breaks, and types other than text or null.
+- The original ticket says "optional ISO date string". The strict format above
+  was agreed later with the user; it is neither a quote from the original
+  requirement nor presented as an RFC 3339 contract.
+- J-04: use the appearance of created_at as a reference; "no tenemos zona horaria",
+  "Espacio, como created_at: 2026-09-10 14:30:00" and "Solo segundos enteros: 14:30:00".
+  This does not change the clock or generation of created_at.
+
+RN-DUE-11 through RN-DUE-13. Allowed day
+- An explicit date must fall on the current day or a later day.
+- Any valid time on the current day is accepted, even if that time has passed.
+- Today is the API host's local date when it processes the request.
+- J-07: "no puede generar una fecha pasada solo fechas posteriores y actuales";
+  the user confirmed any time today and the local-date reference.
+- Do not revalidate a stored date when the operation leaves it unchanged.
+
+Coverage in tests/task-validation.test.ts:
+- "el reloj recibido acepta cualquier hora de hoy y distingue el día anterior".
+- "el calendario y la hora rechazan fechas imposibles sin normalizarlas".
+- "el formato exige espacio, segundos enteros y ningún ajuste de zona horaria".
+- "la misma marca de tiempo usa el día local en ambos lados de medianoche UTC".
+
+5. DELETE /tasks/:id — DELETION
+
+RN-ID-01. Task identification
+- The route must contain decimal digits with a value from 1 through 500000.
+  Leading route zeros remain accepted. Fractions, exponents, and signs return 400.
+- Return 404 if the task does not exist. Otherwise delete it and return 204
+  without a body. Preserve the autoincrement sequence.
+- The same route ID rules apply to PATCH.
+- Malformed percent encoding in PATCH/DELETE routes, including /tasks/% and
+  /tasks/%E0%A4%A, returns 400 before a model call or SQLite change:
+  {"error":"Invalid URL encoding. Use a valid percent-encoded task ID."}
+  This recognizes Express's route-decoding failure; internal errors retain 500.
+
+Coverage in tests/api-safety.test.ts:
+- "PATCH y DELETE rechazan IDs ambiguos antes de tocar la tarea 1".
+- "devuelve 499999 y 500000 distintos y acepta el límite en PATCH y DELETE".
+Coverage in tests/error-handler.test.ts: both methods and both malformed paths
+assert 400, the exact response, zero model calls, and unchanged SQLite snapshots.
+
+6. POST /tasks/bulk-complete — BULK COMPLETION
+
+RN-BULK-01 and RN-BULK-05 through RN-BULK-07. Input
+- A JSON object containing only ids: 1 to 500 unique numeric IDs from 1 to 500000.
+- Require decimal digits in the original JSON; reject signs, fractions, and
+  exponents even when Number converts them to an allowed integer.
+- Reject empty arrays, duplicates, additional properties, incorrect types,
+  and any invalid item with 400. Do not apply part of the request.
+- Also reject repeated ids properties in the original body; this error takes
+  precedence over the value of the last occurrence.
+- One error per field: ids first, then unknown fields ordered by name. Item
+  messages identify a zero-based index. Non-object bodies use field: "body".
+
+RN-BULK-02 through RN-BULK-04. Effect and atomicity
+- In one transaction, check every ID and change only completed=false to true.
+  If any IDs are missing, return 404 with all missing IDs in numeric order.
+- Return 200 with {"updated":n}, counting only actual transitions.
+  Already completed tasks are valid and may produce {"updated":0}.
+- Preserve other fields, including past dates, and the sequence.
+  Roll back the entire batch if a write fails.
+- Approval: "con firmo todo lo anterio r usa tu criterio en ti si confio date".
+  Presented and accepted rationale: count actual changes, prevent partial
+  updates, and never accept an ID through rounding. Technical judgment was
+  delegated for retaining original numeric spelling and detecting repeated keys.
+
+Coverage in tests/api-safety.test.ts:
+- "bulk-complete cuenta transiciones reales, acepta el ID máximo y conserva los demás datos".
+- "bulk-complete rechaza atómicamente los IDs inexistentes y los informa en orden numérico".
+- "bulk-complete rechaza numerales ambiguos usando su escritura JSON original".
+- "bulk-complete admite 500 IDs y rechaza 501 sin aplicar cambios".
+- "bulk-complete revierte escrituras parciales ante un fallo SQLite y oculta los detalles internos".
+
+7. SHARED VALIDATION AND ERRORS
+
+RN-VAL-01 through RN-VAL-05 and G-01. Responses
+- Public messages are in English; validation returns 400 with errors and
+  field/message. Keep the array even when only one error exists.
+- For POST/PATCH: title, completed, priority, due_date, then unknown fields by
+  name; return one message per field. Non-object bodies or empty PATCH use body.
+- Malformed JSON: 400; 100 KB limit (102400 bytes): 413;
+  unsupported charset or content encoding: 415; unexpected failure: 500.
+- Invalid Express route percent decoding: 400 with the route error above.
+  An internal SyntaxError or URIError is still an unexpected failure, not
+  proof that the client sent malformed JSON or a malformed URL.
+- Preserve agreed errors for IDs, missing tasks, and exhausted capacity.
+- Log internal causes on the server without copying the complete request body
+  or exposing internal details to the client. If headersSent, delegate the error.
+- G-01: "la redaccion siempre en ingles"; G-03: "siempre zod".
+  Approved rationale: correct invalid fields together with clear guidance.
+
+Coverage:
+- tests/task-validation.test.ts:
+  "los errores del cuerpo mantienen mensajes, orden y una entrada por campo".
+- tests/api-safety.test.ts:
+  "JSON mal formado devuelve el contrato 400 antes de cualquier escritura".
+  "el parser mantiene el límite de 100 KB y responde 413 sin alterar SQLite".
+  "el parser responde 415 para charset o content encoding no soportados".
+- tests/error-handler.test.ts:
+  "un SyntaxError interno devuelve 500 y registra la causa sin copiar el cuerpo de la solicitud".
+  Three internal URIError cases without the complete Express decoding signature
+  retain the generic 500 response and server-side cause logging.
+
+8. INITIALIZATION, BACKUP, AND PERSISTENCE
+
+RN-INI-01 through RN-INI-03 and RN-DB-04. Initialization
+- Within the transaction, detect whether tasks existed before applying the schema.
+- Seed examples only when that initialization creates tasks; an existing SQLite
+  file without that table also receives examples.
+- Preserve an existing table, empty or populated, and its sequence. A manually
+  created empty table receives no examples; dropping the table allows it to be
+  recreated and seeded by a subsequent initialization.
+- Retain schema and ID checks and rollback on failure.
+- Approval: "ok acepto date". Presented and accepted rationale: respect deliberate
+  emptying and prevent restarts from consuming IDs by reinserting examples.
+
+RN-DB-01 through RN-DB-03 and RN-DB-05 through RN-DB-07. Explicit update
+- npm run db:update creates a new timestamped backup under data/backups and
+  updates the same data/tasks.db. Do not run it automatically at startup.
+- Add missing columns with priority='medium' and due_date=NULL.
+- Compare metadata and values of every tasks column, including generated
+  columns, rows, IDs, and its sequence before and after the change; read exact integers.
+- Scope excludes other tables and the complete DDL; integrity and foreign keys
+  are separate checks. Do not promise complete database equivalence.
+- Reject incompatible columns without automatic repair. The API does not start
+  when required columns are missing or existing IDs are out of range.
+- Roll back the update on failure and retain the backup. Report the stage;
+  differences include table, field, expected/actual, and taskId where applicable.
+- J-08/J-09: compare to preserve data integrity, run explicitly, and locate the
+  source of the error: "es correcto espeficando donde nace el error".
+
+Coverage:
+- tests/api-safety.test.ts:
+  "los reinicios conservan tasks existente, vacía o poblada, sin reinsertar ejemplos".
+  "POST después de reiniciar una tabla vaciada respeta la secuencia y su límite".
+- tests/database-update.test.ts:
+  "el comando real de actualización respalda, conserva datos exactos y es idempotente en otro proceso".
+  "detecta diferencias de enteros grandes aunque Number las redondearía al mismo valor".
+  "un fallo de integridad posterior revierte también las columnas agregadas".
+  "la comparación de conservación está limitada a tasks y su secuencia".
+
+9. SOURCES, DOCUMENTATION, AND OUTSTANDING WORK
+
+RN-DOC-01/RN-DOC-02, J-10, and J-14: keep documentation and the plan consistent,
+group outstanding work, and do not present superseded history as current decisions.
+RN-TEST-01: retain automated filter and bulk coverage, as well as regressions.
+RN-ENT-01: deliver a PR from a fork to main with signed/verified commits.
+Activity 5 was completed under the user's publication instruction using the
+selected isaac12odin account. The English description and deliverable files
+were reviewed; the delivery commit has a verified GitHub signature, and PR #2
+is open from the fork to upstream main. WORK_PLAN.md links the verified results.
+Publication does not imply upstream approval or merge.
+The user authorized the exact Activity 6 correction: keep Express 4.22.2,
+Node >=20, and better-sqlite3 11.10.0; install body-parser 1.20.8 and qs 6.16.0
+with the qs override scoped under Express. Broader upgrades are outside this work.
+See docs/DEPENDENCY_REVIEW.md for the scope and docs/LOCAL_VERIFICATION.md for
+the applied project's final checks and preservation evidence.
+The completed technical closure was local only. The user subsequently authorized
+publication as a separate phase; this does not change the recorded local results.
+Technical decisions and differences to explain in the PR are documented in
+docs/TECHNICAL_DECISIONS.md. The original README remains unchanged by explicit request.

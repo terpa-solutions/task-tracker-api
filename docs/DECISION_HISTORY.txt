@@ -1,0 +1,1982 @@
+DECISION HISTORY — NON-NORMATIVE ARCHIVE
+
+This file preserves the complete earlier business rules, including superseded
+decisions, old proposals, and historical status. Do not treat that history as
+current rules or pending work.
+Current references: ../BUSINESS_RULES.txt, HTTP_CONTRACT.md, TECHNICAL_DECISIONS.md,
+and ../WORK_PLAN.md. Historical filenames inside the preserved payload stay unchanged.
+The following section reproduces the original 111923 bytes without modification.
+Original payload SHA256: 02E84B2EBCD226BEAD7369454A5B875B58E0C01B348CAC793C8DBE8012D8F5B4
+
+----- BEGIN COMPLETE HISTORICAL DOCUMENT -----
+
+REGLAS DE NEGOCIO — TASK TRACKER API
+
+Fuente de requisitos: README.md y respuestas explícitas del usuario.
+Propósito: servir de base para la documentación del proyecto, conservando las
+reglas vigentes, sus justificaciones, las decisiones pendientes y la evidencia.
+Las actividades por realizar se consultan en PLAN_DE_TRABAJO.md.
+Estado: reglas de priority, formato de due_date y tratamiento de ausencia,
+null y entradas vacías confirmados. Se permiten el día actual y los futuros,
+con cualquier hora válida, tomando hoy de la fecha local del equipo de la API.
+
+ACTIVIDAD 8 — SIMPLIFICACIÓN INTERNA Y CONSERVACIÓN DE CONTRATOS
+Estado: COMPLETADA Y COMPROBADA.
+
+Fuente: el usuario aprobó los seis puntos de la actividad 8 y pidió documentar
+sus motivos sin exagerar. Son decisiones técnicas para sostener las reglas
+existentes, no nuevos requisitos para quien consume la API.
+
+- RN-INI-01 a RN-INI-03: openDatabase() inicializa explícitamente. Importar
+  db, modelo, controlador, rutas o app no abre SQLite. Se mantiene la misma
+  transacción y condición de siembra. Motivo: poder crear aplicaciones aisladas
+  sin activar la base de trabajo al importar un módulo.
+- El arranque compone conexión, modelo y aplicación; cada modelo prepara sus
+  consultas para esa conexión. El dueño de la conexión la cierra después del
+  servidor. Se conservan routes/controller/model y archivos .ts, sin añadir
+  una infraestructura de inyección ni nuevas dependencias.
+- RN-VAL-01, RN-VAL-05 y RN-FIL-09: se comparte el recorrido de errores Zod,
+  manteniendo mensajes, prioridad de errores, orden y una entrada por campo.
+  Motivo: evitar que dos copias del mismo recorrido diverjan al mantenerlas.
+- RN-DUE-01 a RN-DUE-14: ausencia, calendario y comparación de día local
+  quedan separados. Las pruebas reciben un reloj fijo; producción consulta
+  el día local del equipo por solicitud. Esto no convierte zonas horarias ni
+  cambia created_at, que sigue generado por SQLite. Omitir, borrar con null
+  o cadena vacía y rechazar espacios en PATCH conserva lo ya acordado.
+- RN-DB-01, RN-DB-02 y RN-DB-06: las capturas fuerzan enteros exactos por
+  sentencia, incluidos campos adicionales, metadatos y secuencia. Motivo:
+  detectar diferencias que Number podría redondear, con independencia de la
+  configuración de quien abrió la conexión. Se elimina solo la lectura completa
+  inicial descartada; el respaldo y ambas comparaciones permanecen.
+- RN-DB-07: el analizador reconoce la declaración CHECK soportada, con las
+  variantes documentadas. No demuestra equivalencias generales de SQL; por
+  ejemplo, una expresión equivalente con OR sigue requiriendo revisión.
+  Esto respeta la decisión de cancelar e informar sin reparar automáticamente.
+
+Cobertura: tests/api-safety.test.ts contrasta HTTP con SQLite temporal y
+comprueba aislamiento; tests/task-validation.test.ts cubre fecha y errores;
+tests/database-update.test.ts verifica respaldo, comparación y enteros exactos;
+tests/error-handler.test.ts conserva los errores internos y su protección.
+Se mantienen procesos separados para importación sin efectos, arranque,
+reinicio, comando de migración y diferencias de zona local. Las pruebas HTTP
+ordinarias usan el mismo proceso y una base temporal propia. La cobertura de
+calendario y zona local se concentra en su archivo, evitando duplicarla.
+
+Evidencia de cierre: npm run test:db con Node 20.20.2 pasó 90 pruebas,
+sin fallos, omisiones ni cancelaciones, en 19.29 segundos; npm run build
+finalizó correctamente. Logs: data/refactor-tests.log y
+data/refactor-build.log. No se cambiaron dependencias ni el requisito de Node.
+El servicio se reinició en localhost:3000: /health, listado, lote sin cambios
+y rechazos conservaron sus respuestas. Las cuatro tareas, columnas, esquema
+y secuencia tasks=4 coinciden con data/refactor-before.json; integridad ok.
+Evidencia: data/refactor-verification.json, 2026-09-09T06:46:40.392Z.
+Se retira la actividad 8 y la verificación final ya cumplida del plan.
+
+HISTORIAL — ACTIVIDADES 2 Y 3: LOTE Y ERRORES DE JSON
+
+- El usuario aprobó las propuestas de ambas actividades y delegó el criterio
+  de implementación: "con firmo todo lo anterio r usa tu criterio en ti si confio date".
+- P-BULK-01/G-06 y el contrato del parser G-07 quedan resueltos según las
+  reglas de lote y validación documentadas más adelante.
+- Implementadas y comprobadas en la suite con Node 20.20.2: 74 pruebas
+  aprobadas, cero fallidas; compilación correcta. Evidencia:
+  data/bulk-tests.log y data/bulk-build.log.
+- Servicio reiniciado y comprobado: las cuatro tareas, esquema, columnas y
+  secuencia 4 permanecen iguales; integridad ok. Lote y errores responden con
+  los contratos acordados. Evidencia: data/bulk-before.json y
+  data/bulk-verification.json. Actividades 2 y 3 completadas.
+
+AVANCE ACTUAL — INICIALIZACIÓN Y DATOS DE EJEMPLO
+
+- P-INI-01 resuelta: el usuario respondió "ok acepto date" después de explicar
+  las ventajas, consecuencias y conservación de datos de la propuesta.
+- Regla aprobada: sembrar ejemplos únicamente cuando la inicialización crea
+  la tabla tasks; preservar una tabla existente, vacía o poblada, y su secuencia.
+- Implementado y comprobado con Node 20.20.2: 63 pruebas aprobadas, cero
+  fallidas/omitidas/canceladas; compilación correcta. Evidencia:
+  data/seed-startup-tests.log y data/seed-startup-build.log.
+- El reinicio del servicio local conserva exactamente sus cuatro tareas,
+  columnas y secuencia 4; integridad ok. /health y /tasks responden HTTP 200,
+  con el listado igual a SQLite. Evidencia: data/seed-startup-before.json y
+  data/seed-startup-verification.json.
+
+AVANCE ACTUAL — ACTIVIDAD 1 COMPLETADA: FILTROS
+
+- Confirmado: selección múltiple por comas, alternativas dentro del mismo
+  filtro y combinación de estado y prioridad, con las seis consultas del usuario.
+- Confirmado e implementado: rechazos completos con 400, repeticiones y errores
+  en inglés con indicaciones de llenado y el orden acordado.
+- Implementado y comprobado: consulta del modelo, validación Zod y conexión
+  al controlador con el contrato uniforme aprobado.
+- Las seis consultas y entradas inválidas se comprobaron por HTTP contra SQLite,
+  conservando filas y secuencia en las bases temporales.
+- P-FIL-02 resuelta por "lo apruebo": toda respuesta exitosa del listado usa
+  {"tasks":[...],"message":null}; sin tareas usa
+  {"tasks":[],"message":"No matching tasks found."}. HTTP 200 en ambos casos.
+- Implementados y comprobados: JSON completo del listado y catálogo de
+  prioridades compartido por tipos y Zod. Node 20.20.2: 52 pruebas aprobadas,
+  cero fallidas/omitidas/canceladas; compilación correcta.
+- Servicio local comprobado en 15 consultas HTTP: 13 válidas contrastadas
+  con SQLite y dos inválidas con HTTP 400. Se conservan sus cuatro tareas,
+  columnas y secuencia; integridad ok. Evidencia: data/list-contract-verification.json.
+- La actividad 1 se retiró del plan de pendientes al completar su verificación.
+- En ese cierre, las actividades 2 a 6 conservaban sus pendientes. El avance
+  posterior de lote y errores de JSON se registra al inicio de este documento.
+
+DECISIONES VIGENTES G-01 A G-04 — IMPLEMENTADAS Y COMPROBADAS
+
+Fuente: el usuario aceptó las alternativas recomendadas y pidió documentar
+las decisiones y sus motivos e implementar. Corrección expresa de G-01:
+"la redaccion siempre en ingles". Para G-03 indicó "siempre zod".
+Las justificaciones siguientes son las presentadas y aceptadas; no se
+atribuyen al usuario motivos adicionales que no haya expresado.
+
+- G-01: HTTP 400 para validaciones del cuerpo de POST/PATCH, con
+  {"errors":[{"field":"priority","message":"..."}]}, incluso con un error.
+  Se informa un error por campo, en orden title, completed, priority, due_date;
+  las propiedades no permitidas se ordenan después por nombre. Un cuerpo
+  inválido se identifica como body. Mensajes siempre en inglés, con campo,
+  causa y corrección; su redacción queda delegada dentro de las reglas aprobadas.
+  Motivo: permitir corregir los problemas de una solicitud juntos y evitar
+  ciclos para descubrirlos uno por uno. El inglés es elección expresa del usuario.
+- G-02: no recortar ni convertir due_date. Rechazar con 400 tipos distintos de
+  texto/null, fechas rodeadas de espacios y textos con tabuladores o saltos de
+  línea. Se conservan las excepciones ya aprobadas para omisión, null, cadena
+  vacía y espacios simples según POST/PATCH. Motivo: exigir la nomenclatura
+  acordada sin aceptar entradas mediante correcciones automáticas.
+- G-03: usar Zod 4.5.4 para estas validaciones y reutilizar Zod en las siguientes
+  actividades. Mantener Node 20+ y verificar con Node 20.20.2. Motivo: seguir la
+  recomendación del README y centralizar comprobaciones compartidas.
+- G-04, campos: POST admite title, priority y due_date; PATCH admite title,
+  completed, priority y due_date. Cualquier otra propiedad genera 400,
+  incluidos id y created_at en ambos y completed en POST. Motivo: detectar
+  nombres mal escritos y evitar aparentes éxitos con campos ignorados.
+- G-04, cuerpo: exigir un objeto JSON; rechazar arreglos, null y valores
+  simples con 400. PATCH {} devuelve 400 e indica los campos permitidos.
+  Motivo: exigir una solicitud que declare qué modificar.
+- G-04, atomicidad: un PATCH con campos válidos e inválidos se rechaza entero,
+  sin escrituras ni cambios parciales. Motivo: conservar un resultado
+  predecible y permitir corregir la solicitud antes de modificar la tarea.
+
+Esta aprobación sustituye los estados pendientes de P-ERR-01/02, P-DUE-14,
+P-UPD-02/03 y la elección técnica y de campos de P-VAL-01. El catálogo E-08
+contiene los mensajes implementados en inglés; sustituye la propuesta anterior
+en español. El cierre al final registra las 44 pruebas y la compilación.
+
+FORMA DE TRABAJO HASTA FINALIZAR EL PROYECTO
+
+- Consultar al usuario toda decisión o ambigüedad antes de resolverla.
+- No elegir automáticamente una alternativa por considerarla la mejor.
+- Registrar las respuestas del usuario y distinguirlas de preguntas pendientes.
+- Una pregunta sin respuesta permanece pendiente; no implica aprobación.
+- Las propuestas anteriores del plan no equivalen a decisiones aprobadas.
+- Retirar las actividades terminadas del plan; conservar aquí sus reglas,
+  decisiones, justificaciones y resultados para la documentación.
+- Orden confirmado para terminar la actividad 1: acordar errores pendientes,
+  incorporar los campos en POST, cerrar los casos pendientes de PATCH e
+  incorporarlos, y verificar el recorrido completo.
+- Este orden no resuelve las preguntas de negocio ni las elecciones técnicas
+  que todavía no tengan respuesta.
+- Agrupar las consultas relacionadas y mantener cada decisión pendiente en
+  un único grupo del plan. Aplicar las respuestas confirmadas sin volver a
+  preguntarlas al pasar a otro endpoint; consultar solo diferencias de alcance
+  que todavía no estén resueltas. Una respuesta parcial no aprueba el resto.
+- Distinguir decisión pendiente, implementación pendiente y evidencia de cierre.
+  Reutilizar comprobaciones vigentes; repetirlas ante cambios o fallos nuevos.
+
+JUSTIFICACIONES Y FUNDAMENTOS APORTADOS POR EL USUARIO
+
+Las citas entre comillas reproducen sus respuestas. Los apartados de alcance
+relacionan esas respuestas con las reglas; no agregan decisiones nuevas.
+Cuando existe una elección sin un motivo adicional expreso se indica así,
+para no presentar una explicación del agente como justificación del usuario.
+
+J-01. Planificar y dividir el trabajo
+Motivo expreso: conocer cómo abordar el proyecto y planificar la interacción;
+dividir la primera actividad para segmentar más el problema.
+Fuentes: solicitudes de generar actividades desde el README y de subdividir
+la actividad uno. El usuario también prohibió asumir la mejor respuesta y
+pidió consultar cualquier decisión hasta finalizar el proyecto.
+Alcance: forma de trabajo, división del plan y registro de preguntas pendientes.
+
+J-02. Delimitar el valor predeterminado de priority
+Motivo expreso: delimitar qué entradas se consideran válidas, distinguiendo
+el valor medium predeterminado de un valor vacío o null enviado por el cliente.
+Fuente: instrucción sobre priority seguida de la respuesta a P-PRI-01:
+"rechaza la solicitud y en el 400 responde como ser llenado y que espero para ser valido".
+Alcance: RN-PRI-01 a RN-PRI-05. Medium al omitir la propiedad en creación;
+rechazo de valores vacíos/nulos e indicaciones para corregir la solicitud.
+
+J-03. Exigir el texto exacto de cada prioridad
+Decisión expresa: ante "HIGH" y " high ", solo "high" es válido; aplicar
+la misma regla a low y medium. Confirmación posterior: "es correcto".
+Alcance: RN-PRI-05 y RN-PRI-06, sin conversión automática ni recorte.
+No se proporcionó un motivo adicional distinto de delimitar los valores válidos.
+
+J-04. Usar created_at como referencia de representación
+Motivo expreso: definir due_date con fecha, hora, minutos y segundos de forma
+similar a created_at. Aclaración: "no tenemos zona horaria".
+Respuestas sobre representación:
+"Espacio, como created_at: 2026-09-10 14:30:00".
+"Solo segundos enteros: 14:30:00".
+Alcance: RN-DUE-02 a RN-DUE-04. La referencia es el formato del texto;
+no modifica created_at ni decide una conversión de zonas horarias.
+
+J-05. Permitir la ausencia de due_date porque es opcional
+Motivo expreso: "puede enviar null o dejarlo en blanco el campo al final es opcional".
+Aclaraciones: se acepta "" o null explícito. La respuesta anterior para solo
+espacios fue "Aceptarlo como campo vacío"; sigue aplicando a POST. Para PATCH
+fue sustituida por el rechazo con 400 de P-DUE-16. Para JSON sin fecha:
+"puede estar en null va".
+Alcance: RN-DUE-01 y RN-DUE-05 a RN-DUE-07, RN-DUE-09 y RN-DUE-14.
+El efecto del vacío en PATCH se define en la revisión de J-06.
+
+J-06. Omitir conserva; enviar una cadena vacía expresa eliminación
+Justificación actual del usuario: enviar due_date es una modificación
+deliberada; si no se quiere afectar la fecha, no debe enviarse el campo.
+Respuesta original: "si porque se considera alteracion delivereda  y  esto tambien  deberia considerarse si no loqueiere afectar que no lo mande".
+Confirmó con "si" que enviar {"due_date":""} convierte la fecha en null
+inmediatamente al procesar esa misma solicitud PATCH.
+Para solo espacios pidió delimitar al programador a seguir la nomenclatura
+de la solicitud y precisó: "con un 400 retornando la nomnglatura esperada para el".
+Alcance: RN-DUE-08 a RN-DUE-10 y RN-UPD-01. Omitir conserva; "" y null
+quitan la fecha. Solo espacios se rechaza con 400 e indicaciones del formato.
+Esta revisión sustituye la decisión anterior de conservar la fecha al enviar
+"" o solo espacios en PATCH. Las respuestas anteriores se retienen como
+antecedentes, identificadas como sustituidas en P-DUE-08 y P-DUE-09.
+
+J-07. Restringir por día, con referencia local del equipo
+Decisión expresa: "no puede generar una fecha pasada solo fechas posteriores y actuales".
+Aclaración: "Sí; se permite cualquier hora del día actual".
+La referencia al día local del equipo que ejecuta la API fue confirmada con
+"es correcto". Alcance: RN-DUE-11 a RN-DUE-13.
+No se indicó un motivo adicional para la restricción o la referencia elegida.
+
+J-08. Comprobar la integridad al actualizar la base
+Motivo expreso: respaldar la base anterior y comparar sus campos con los de
+la actualizada para comprobar que no se modificaron y quedaron íntegros;
+verificar además que reiniciar no duplique los datos de ejemplo.
+El usuario indicó que, al faltar los campos nuevos, due_date debe llenarse
+con null y priority con medium.
+Alcance: RN-DB-01 a RN-DB-04 y RN-DUE-14. Se preservan las tareas y los
+valores previos; se asignan predeterminados a las columnas que se agregan.
+
+J-09. Controlar cuándo actualizar y localizar un fallo
+Decisiones expresas: "Una copia nueva por ejecución en data/backups, con fecha y hora en el nombre";
+"En el mismo data/tasks.db, conservando sus tareas"; y
+"Solo al ejecutar un comando específico de actualización".
+Ante cancelación por error y conservación de la base original, el usuario
+confirmó: "es correcto espeficando donde nace el error".
+Alcance: RN-DB-01, RN-DB-05 y RN-DB-06. No se indicó otro motivo para
+elegir ese directorio, el nombre de archivo o el momento de ejecución.
+
+J-10. Preparar la documentación y acordar el trabajo restante
+Motivo expreso de la petición actual: actualizar las reglas e incorporar las
+justificaciones dadas, porque servirán para generar la documentación necesaria.
+El usuario pidió eliminar del plan lo terminado y acordar las actividades.
+Respuesta al orden propuesto: "Sí, seguir ese orden".
+Alcance: mantenimiento de este documento y secuencia de PLAN_DE_TRABAJO.md.
+
+J-11. Limitar los identificadores a un máximo razonable
+Motivo expreso: "no asumas nada los ids hayq eu limitarlos algo razonable".
+Al preguntar por el máximo, con mínimo 1 ya acordado, respondió: "500000".
+Ante una creación que exceda ese máximo, indicó:
+"400: no se puede crear porque se alcanzó el límite".
+Alcance: RN-ID-01 y RN-ID-02. Sustituye el máximo anterior de enteros seguros;
+se conservan los números JSON y la prohibición de redondear identificadores.
+
+J-12. Actualizar la dependencia y comprobar el entorno acordado
+Decisión expresa: "Sí, proceder con esa actualización", ante la propuesta de
+better-sqlite3 13.0.3, mínimo de Node 22, límite 500000 y comprobaciones.
+Después de preguntar si Node era actual o LTS, el usuario confirmó:
+"ok estoy de acuerdo". Se conserva Node 24.20.0 LTS instalado; Node 22 es
+el requisito mínimo del proyecto, no una instrucción para bajar de versión.
+Fundamento técnico de la propuesta: resolver el aborto nativo reproducido
+con better-sqlite3 11.10.0. El usuario no aportó otro motivo para la versión.
+Alcance: P-REV-03, manifiesto, archivo de bloqueo y verificación HTTP.
+Estado posterior: la autorización para elevar el mínimo quedó sustituida
+por P-REV-04. Las pruebas de esa alternativa se conservan como evidencia histórica.
+
+J-13. Respetar el requisito original del examen
+Motivo expreso: "quiero mantener el requisito original y adaptarme a el para la limitacion pero hacer la opcerbacion que se podria hacer ese cambio pero no quise tomar esa facultad".
+Alcance: mantener Node 20+ como requisito del entregable y el límite de IDs
+1..500000. Documentar la actualización que eleva el mínimo como alternativa
+evaluada, sin adoptarla en la entrega. No afirma que nunca se probó localmente:
+la prueba con 13.0.3 ocurrió antes de esta decisión y queda como antecedente.
+
+J-14. Agrupar los pendientes para avanzar sin repetir decisiones
+Motivo expreso de la nueva solicitud: definir bien lo que falta, agrupar el
+trabajo pendiente y evitar seguir resolviendo detalles repetitivos.
+Alcance: seis bloques de trabajo en el plan y un único índice de consultas
+agrupadas. Se conservan las respuestas anteriores, el orden del README y la
+obligación de consultar decisiones nuevas. Cada consulta indica qué falta
+decidir y cuándo hace falta, sin reabrir trabajo ya comprobado.
+
+ACTIVIDAD 1.1 — PRIORITY AL CREAR UNA TAREA
+
+Referencia de organización: los grupos G-01 a G-09 del plan son un índice de
+las preguntas existentes. No sustituyen los identificadores de reglas ni
+convierten propuestas en respuestas aprobadas.
+
+Reglas confirmadas
+
+RN-PRI-01. Catálogo de prioridades
+La prioridad de una tarea debe corresponder a uno de estos valores de texto:
+"low", "medium" o "high".
+Fuente: README y petición actual del usuario.
+
+RN-PRI-02. Valor predeterminado
+Cuando el cuerpo de creación no incluya la propiedad priority, la prioridad
+de la nueva tarea será "medium".
+Fuente: requisito citado por el usuario y valor predeterminado del README.
+
+RN-PRI-03. Rechazo de entradas vacías o nulas
+Si priority se envía como cadena vacía (""), null o una cadena formada
+únicamente por espacios, se rechaza la solicitud con HTTP 400.
+No se sustituye ese valor por "medium".
+Fuente: respuesta explícita del usuario a P-PRI-01.
+
+RN-PRI-04. Valores explícitos del catálogo
+Si se envía "low", "medium" o "high", ese es el valor de priority solicitado
+para la tarea. La aceptación del resto del cuerpo depende de sus propias
+reglas de validación.
+Fuente: catálogo de valores del README.
+
+RN-PRI-05. Información de validación en el error
+El error 400 de RN-PRI-03 y RN-PRI-06 debe identificar el campo priority y
+explicar cómo llenarlo: los únicos valores válidos son los textos exactos
+"low", "medium" y "high", en minúsculas y sin espacios. Debe aclarar que
+para aplicar el valor predeterminado "medium" al crear una tarea se puede
+omitir la propiedad, en lugar de enviar una cadena vacía o null.
+Fuente: petición del usuario de explicar cómo llenar el campo y qué se espera
+para que sea válido. G-01 aprobó el arreglo errors con field/message y mensajes
+en inglés. La redacción implementada se registra en E-08.
+
+RN-PRI-06. Coincidencia exacta para todas las prioridades
+Solo son válidos los textos exactos "low", "medium" y "high".
+No se convierten mayúsculas a minúsculas ni se recortan espacios para aceptar
+una entrada. Cualquier valor enviado que no coincida exactamente con uno de
+esos tres textos se rechaza con HTTP 400 y las indicaciones de RN-PRI-05.
+La misma regla se aplica a las tres prioridades: "HIGH", "LOW", "MEDIUM",
+" high ", " low " y " medium " son inválidos.
+Fuente: confirmación explícita del usuario a P-PRI-02.
+
+Decisiones y preguntas de esta parte
+
+P-PRI-01. Cuando se recibe priority: "", priority: null o una cadena de solo
+espacios, ¿se rechaza la solicitud con 400 o se asigna "medium"?
+Respuesta del usuario: rechazar la solicitud con 400 y explicar cómo llenar
+el campo y qué valores se esperan para que sea válido.
+Estado: RESUELTA; registrada en RN-PRI-03 y RN-PRI-05.
+
+P-PRI-02. ¿Debe exigirse coincidencia exacta con "low", "medium" y "high",
+o deben convertirse las mayúsculas y quitarse los espacios de los extremos
+antes de validar, por ejemplo con "HIGH" y " high "?
+Respuesta del usuario: exigir coincidencia exacta, en minúsculas y sin
+espacios. "HIGH" y " high " se rechazan con HTTP 400; la misma regla aplica
+a "low" y "medium".
+Estado: RESUELTA; registrada en RN-PRI-05 y RN-PRI-06.
+
+Casos para delimitar el campo en una solicitud de creación
+
+Entrada de priority                  Resultado para priority
+Propiedad omitida                    "medium"
+"low"                                "low"
+"medium"                             "medium"
+"high"                               "high"
+""                                   HTTP 400 con indicaciones de RN-PRI-05
+null                                 HTTP 400 con indicaciones de RN-PRI-05
+"   "                                HTTP 400 con indicaciones de RN-PRI-05
+"HIGH"                               HTTP 400 con indicaciones de RN-PRI-05
+" high "                             HTTP 400 con indicaciones de RN-PRI-05
+"LOW"                                HTTP 400 con indicaciones de RN-PRI-05
+" low "                              HTTP 400 con indicaciones de RN-PRI-05
+"MEDIUM"                             HTTP 400 con indicaciones de RN-PRI-05
+" medium "                           HTTP 400 con indicaciones de RN-PRI-05
+
+Omitir priority al crear aplica "medium"; enviarlo con null, "" o solo espacios
+provoca HTTP 400. Las variantes de mayúsculas o espacios también provocan
+HTTP 400; no se corrigen automáticamente.
+
+Estado de esta parte
+
+- P-PRI-01 y P-PRI-02 resueltas y registradas.
+- Definición de los valores, valor predeterminado y rechazo de entradas de
+  priority al crear: COMPLETADA.
+- Redacción literal y estructura del error: RESUELTAS e implementadas en
+  G-01 y E-08, con messages en inglés y un error por campo.
+- priority está integrado en SQLite, TaskRow, Task, toTask, GET, POST y PATCH.
+  La recepción, validación, valor predeterminado y conservación al omitir
+  están implementados y comprobados.
+- Cualquier ambigüedad adicional se consultará antes de tomar una decisión.
+
+ACTIVIDAD 1.1 — FECHA Y HORA DE DUE_DATE
+
+Reglas confirmadas
+
+RN-DUE-01. Campo opcional
+El README solicita due_date como cadena de fecha ISO opcional.
+La representación de la ausencia en las respuestas queda definida en
+RN-DUE-05. La aceptación de null en las solicitudes queda definida en
+RN-DUE-06. La cadena vacía se acepta conforme a RN-DUE-07. Los textos con
+solo espacios siguen RN-DUE-09 según la operación: aceptados en POST y
+rechazados en PATCH; no se heredan las reglas de priority.
+Fuente: README.
+
+RN-DUE-02. Fecha y hora
+Cuando se proporcione una fecha límite, debe incluir fecha, hora, minutos
+y segundos. El usuario indicó usar como referencia created_at.
+La propuesta anterior de representar únicamente YYYY-MM-DD queda sustituida
+por este requisito de fecha y hora.
+Fuente: instrucción explícita del usuario.
+
+RN-DUE-03. Sin zona horaria
+La representación de due_date no llevará zona horaria.
+El campo no lleva una zona asignada ni requiere una conversión entre zonas.
+La referencia local para determinar hoy es la regla separada RN-DUE-13.
+Fuente: aclaración explícita del usuario: "no tenemos zona horaria".
+
+RN-DUE-04. Formato exacto y precisión
+El formato de due_date será YYYY-MM-DD HH:mm:ss: fecha seguida de un espacio
+y hora con minutos y segundos enteros.
+Ejemplo de formato: "2026-09-10 14:30:00".
+No se usa la letra T como separador ni se incluyen fracciones de segundo.
+La representación no incluye zona horaria, conforme a RN-DUE-03.
+Fuente: respuestas explícitas del usuario a P-DUE-01 y P-DUE-02.
+
+RN-DUE-05. Fecha ausente en la respuesta JSON
+Cuando una tarea no tenga fecha límite, la respuesta JSON incluirá la
+propiedad due_date con el valor null: "due_date": null.
+La aceptación de null en solicitudes de creación y actualización queda
+registrada en RN-DUE-06.
+Fuente: respuesta explícita del usuario a P-DUE-03: "puede estar en null".
+
+RN-DUE-06. Null permitido en solicitudes
+Se permite enviar explícitamente "due_date": null porque el campo es opcional.
+Al crear una tarea, null indica que no tiene fecha límite.
+Al actualizar con PATCH, null permite quitar la fecha límite asignada.
+La respuesta de una tarea sin fecha incluye "due_date": null, según RN-DUE-05.
+Fuente: respuesta del usuario a las consultas de creación y actualización:
+"puede enviar null o dejarlo en blanco el campo al final es opcional".
+La aclaración sobre la cadena vacía está registrada en RN-DUE-07.
+
+RN-DUE-07. Cadena vacía permitida
+Se permite enviar explícitamente "due_date": "" porque el campo es opcional.
+La cadena vacía no se rechaza por carecer del formato de una fecha.
+Fuente: aclaración del usuario a P-DUE-06, que permite enviar "" o null explícito.
+La respuesta de una tarea sin fecha será null, conforme a RN-DUE-05.
+El efecto de enviar "" en PATCH queda definido en RN-DUE-10. La cadena con
+solo espacios queda definida en RN-DUE-09.
+
+RN-DUE-08. Omisión de due_date en PATCH
+Si la solicitud PATCH no incluye la propiedad due_date, se conserva la
+fecha límite actual de la tarea.
+Omitir la propiedad no elimina la fecha ni la sustituye por null.
+Fuente: respuesta del usuario a P-DUE-07: "Conservar la fecha actual".
+
+RN-DUE-09. Texto con solo espacios
+En POST, una cadena formada únicamente por espacios, por ejemplo "   ",
+se trata como un campo vacío y permite crear sin fecha.
+En PATCH, una cadena de solo espacios es inválida y provoca HTTP 400.
+Se conserva la tarea completa, incluso si el cuerpo también incluye cambios
+válidos, conforme al rechazo sin cambios parciales aprobado en P-UPD-03.
+El error debe identificar due_date e indicar la nomenclatura esperada:
+fecha YYYY-MM-DD HH:mm:ss; null o cadena vacía exacta ("") para quitarla;
+omitir la propiedad para conservarla. Solo espacios no equivale a "" en PATCH.
+La estructura y redacción literal del error están en el contrato aprobado
+de errores; el código 400 y estas indicaciones están confirmados.
+Fuentes: P-DUE-08 para POST; corrección del usuario en P-DUE-16 para PATCH.
+Justificación de la corrección: J-06.
+
+RN-DUE-10. Campo vacío en PATCH
+Enviar "due_date": "" en PATCH solicita eliminar la fecha: se guarda NULL
+y se devuelve "due_date": null al procesar esa misma solicitud.
+La eliminación es inmediata; no se programa para el final del día.
+También se permite quitarla con null, conforme a RN-DUE-06.
+Para conservar la fecha se omite la propiedad, conforme a RN-DUE-08.
+Los textos de solo espacios siguen el rechazo de RN-DUE-09.
+Fuente: corrección del usuario y confirmación en P-DUE-15; justificación J-06.
+Esta regla sustituye el efecto anterior de conservación para la cadena vacía.
+
+RN-DUE-11. Fechas actuales o futuras
+Cuando se proporcione una fecha límite, no se admiten fechas pasadas; se
+permiten fechas actuales y futuras.
+Fuente: respuesta explícita del usuario: "no puede generar una fecha pasada
+solo fechas posteriores y actuales".
+La comparación se realiza por día de calendario, conforme a RN-DUE-12.
+El día actual se determina conforme a RN-DUE-13; no se asigna una zona horaria
+a due_date por esta regla.
+
+RN-DUE-12. Se permite cualquier hora del día actual
+Para determinar si la fecha límite está en el pasado se compara únicamente
+su fecha de calendario (año, mes y día) con el día actual.
+Una fecha de hoy es válida aunque su hora ya haya pasado. Las fechas de días
+futuros también se permiten. Las fechas de días anteriores no se permiten.
+Las horas, minutos y segundos siguen formando parte del formato obligatorio
+cuando se envía una fecha; no intervienen en esta comparación por día.
+Fuente: respuesta del usuario a P-DUE-11: "Sí; se permite cualquier hora del
+día actual".
+
+RN-DUE-13. Referencia del día actual
+Para determinar qué día es hoy se usa la fecha local del equipo donde se
+ejecuta la API. La fecha de calendario de due_date se compara con ese día,
+conforme a RN-DUE-12.
+Esta referencia no añade una zona horaria al valor de due_date.
+Fuente: confirmación explícita del usuario a P-DUE-12: "es correcto".
+
+RN-DUE-14. Fecha ausente en SQLite
+La ausencia de fecha límite se representa con NULL en SQLite.
+Al agregar due_date a las tareas del esquema anterior que no tienen ese
+campo, su valor será NULL. La representación JSON sigue siendo null.
+Fuente: instrucción del usuario para el respaldo y actualización de la base:
+"como no tiene fecha due tiene que llenarse en null".
+
+Ejemplos de la restricción por día
+
+Suponiendo que hoy sea 2026-09-10 y sean las 15:00:00:
+
+Valor de due_date          Resultado de la restricción temporal
+2026-09-09 23:59:59         No permitido: pertenece a un día anterior
+2026-09-10 00:00:00         Permitido: pertenece al día actual
+2026-09-10 10:00:00         Permitido: pertenece al día actual
+2026-09-10 23:59:59         Permitido: pertenece al día actual
+2026-09-11 00:00:00         Permitido: pertenece a un día futuro
+
+Casos de ausencia y entradas vacías
+
+Entrada de due_date        Creación                PATCH con fecha existente
+Propiedad omitida          Sin fecha               Conserva la fecha actual
+null                      Sin fecha               Quita la fecha; queda null
+""                        Sin fecha               Quita la fecha de inmediato; null
+"   "                     Sin fecha               HTTP 400; conserva la fecha
+
+Cuando el resultado sea una tarea sin fecha, el JSON incluye "due_date": null.
+La representación interna en SQLite para una fecha ausente es NULL, según RN-DUE-14.
+
+Referencia observada en el código
+
+schema.sql define created_at como texto con valor generado por datetime('now').
+src/types.ts lo devuelve como texto sin cambiar su representación.
+El formato observado es YYYY-MM-DD HH:mm:ss, con un espacio entre fecha y hora
+y sin indicador de zona en el texto. El usuario confirmó esa representación
+para due_date; la regla se sustenta en sus respuestas.
+
+Decisiones y preguntas sobre due_date
+
+P-DUE-01. ¿Qué separador debe llevar due_date entre fecha y hora: un espacio
+como created_at (2026-09-10 14:30:00) o la letra T (2026-09-10T14:30:00)?
+Respuesta del usuario: espacio, como created_at: "2026-09-10 14:30:00".
+Estado: RESUELTA; registrada en RN-DUE-04.
+
+P-DUE-02. ¿Se admitirán únicamente segundos enteros (14:30:00) o también
+fracciones de segundo (14:30:00.123)?
+Respuesta del usuario: solo segundos enteros, como "14:30:00".
+Estado: RESUELTA; registrada en RN-DUE-04.
+
+P-DUE-03. Cuando una tarea no tenga fecha límite, ¿debe aparecer en la
+respuesta JSON como "due_date": null o debe omitirse la propiedad?
+Respuesta del usuario: puede estar en null.
+Estado: RESUELTA; registrada en RN-DUE-05.
+
+P-DUE-04. Al crear una tarea, ¿se acepta que el cliente envíe explícitamente
+"due_date": null para indicar que no hay fecha límite?
+Respuesta del usuario: puede enviar null; el campo es opcional.
+Estado: RESUELTA; registrada en RN-DUE-06.
+
+P-DUE-05. Al actualizar con PATCH, ¿se acepta "due_date": null para quitar
+una fecha límite ya asignada?
+Respuesta del usuario a las consultas de creación y actualización: puede
+enviar null; el campo es opcional.
+Estado: RESUELTA; registrada en RN-DUE-06.
+
+P-DUE-06. Cuando el usuario dice dejar due_date en blanco, ¿se refiere a
+omitir la propiedad, a enviar una cadena vacía (""), a enviar solo espacios
+o a una combinación de esos casos?
+Respuesta del usuario: se permite enviarlo en blanco como "" o enviar null
+explícito.
+Estado: RESUELTA para la aceptación de "" y null; registrada en RN-DUE-06
+y RN-DUE-07. El caso de solo espacios está en P-DUE-08, con su corrección
+posterior para PATCH en P-DUE-16.
+
+P-DUE-07. Si una tarea ya tiene fecha límite y en PATCH se omite la propiedad
+due_date, ¿se conserva su fecha actual o se elimina y queda en null?
+Respuesta del usuario: conservar la fecha actual.
+Estado: RESUELTA; registrada en RN-DUE-08.
+
+P-DUE-08. Si llega "due_date": "   " (solo espacios), ¿se acepta como
+campo vacío o se rechaza con 400 explicando el formato válido?
+Respuesta anterior del usuario: aceptarlo como campo vacío.
+Estado: CONSERVADA para POST; SUSTITUIDA para PATCH por P-DUE-16.
+La regla vigente por operación está en RN-DUE-09.
+
+P-DUE-09. Si una tarea ya tiene fecha y se envía "due_date": "" en PATCH,
+¿se quita la fecha y se devuelve null o se conserva la fecha actual?
+Respuesta anterior del usuario: conservar la fecha actual.
+Estado: SUSTITUIDA por P-DUE-15. La regla vigente RN-DUE-10 elimina la fecha
+inmediatamente al enviar "" en PATCH.
+
+P-DUE-10. ¿Se permiten fechas límite pasadas o debe existir una restricción
+respecto al tiempo?
+Respuesta del usuario: no se permiten fechas pasadas; solo actuales y futuras.
+Estado: RESUELTA como regla general en RN-DUE-11; la comparación por día
+quedó resuelta en P-DUE-11 y RN-DUE-12.
+
+P-DUE-11. Si hoy son las 15:00 y se recibe una fecha límite de hoy a las
+10:00, ¿debe aceptarse por pertenecer al día actual o rechazarse porque esa
+hora ya pasó?
+Respuesta del usuario: sí; se permite cualquier hora del día actual.
+Estado: RESUELTA; registrada en RN-DUE-12.
+
+P-DUE-12. Para determinar qué día es hoy, ¿se usará la fecha local del equipo
+donde se ejecuta la API? Esta referencia no agrega zona horaria a due_date.
+Respuesta del usuario: es correcto.
+Estado: RESUELTA; registrada en RN-DUE-13.
+
+P-DUE-13. Cuando no haya fecha límite, ¿qué valor debe guardarse en SQLite:
+NULL o una cadena vacía ("")? La respuesta JSON seguirá siendo null.
+Respuesta del usuario: la fecha ausente debe llenarse con null en la base.
+Estado: RESUELTA; registrada en RN-DUE-14.
+
+P-DUE-15. ¿Enviar {"due_date":""} en PATCH convierte la fecha en null
+inmediatamente, al procesar esa misma solicitud?
+Respuesta del usuario: "si".
+Justificación: el envío es una modificación deliberada; para no afectar la
+fecha se debe omitir el campo, según la explicación registrada en J-06.
+Estado: RESUELTA; sustituye P-DUE-09 y actualiza RN-DUE-10.
+
+P-DUE-16. Si una tarea tiene fecha y PATCH recibe {"due_date":"   "},
+¿cuál debe ser el resultado?
+Respuesta del usuario: "con un 400 retornando la nomnglatura esperada para el".
+Justificación: delimitar al programador a seguir la nomenclatura de la solicitud.
+Estado: RESUELTA para PATCH; actualiza RN-DUE-09. La aceptación de espacios
+en POST permanece conforme a su decisión anterior. El JSON literal del error
+está aprobado en G-01 e implementado según E-08.
+
+Estado de esta parte
+
+- Fecha, hora, minutos y segundos: CONFIRMADO.
+- Representación sin zona horaria: CONFIRMADO.
+- Separador: un espacio. Precisión: segundos enteros, sin fracciones.
+- Definición del formato YYYY-MM-DD HH:mm:ss: COMPLETADA.
+- Representación de una fecha ausente en JSON: "due_date": null, CONFIRMADO.
+- Aceptación de null en creación y actualización: CONFIRMADA, RN-DUE-06.
+- Aceptación de la cadena vacía "": CONFIRMADA, RN-DUE-07.
+- Omisión de due_date en PATCH: conservar la fecha actual, CONFIRMADO, RN-DUE-08.
+- Solo espacios: POST los acepta como campo vacío; PATCH los rechaza con 400
+  indicando la nomenclatura esperada, CONFIRMADO, RN-DUE-09.
+- Cadena vacía exacta en PATCH: elimina la fecha inmediatamente y devuelve
+  null, CONFIRMADO, RN-DUE-10. La conservación anterior quedó sustituida.
+- Solo fechas actuales o futuras: CONFIRMADO como regla general, RN-DUE-11.
+- Comparación por día de calendario: CONFIRMADA, RN-DUE-12. Cualquier hora
+  válida del día actual está permitida.
+- Referencia para hoy: fecha local del equipo donde corre la API, CONFIRMADO,
+  RN-DUE-13.
+- Representación de la ausencia en SQLite: NULL, CONFIRMADO, RN-DUE-14.
+- Los errores de formato, calendario y días anteriores están resueltos en
+  G-01 y E-08; las entradas restantes se resolvieron en G-02/P-DUE-14.
+- due_date está integrado en SQLite, TaskRow, Task, toTask, GET, POST y PATCH.
+  Su recepción, validación, ausencia, conservación y eliminación están
+  implementadas y comprobadas. Las cuatro tareas anteriores conservan NULL.
+
+ACTIVIDAD 1.1 — OTROS CAMPOS OMITIDOS EN PATCH
+
+La omisión de due_date ya está resuelta: conserva su valor (RN-DUE-08).
+El código actual conserva title y completed cuando se omiten en PATCH.
+El usuario confirmó conservar también los campos omitidos al incorporar priority.
+
+RN-UPD-01. Conservación de campos omitidos
+En PATCH, si no se incluye title, completed o priority, cada campo omitido
+conserva el valor que ya tiene la tarea. La misma regla aplica a due_date,
+conforme a RN-DUE-08.
+El valor predeterminado medium se aplica al crear sin priority; no sustituye
+una prioridad existente por omitirla en PATCH.
+Los campos presentes siguen sus reglas particulares: para due_date, null
+o "" quitan la fecha; solo espacios se rechaza con 400, según RN-DUE-09/10.
+Fuente: confirmación del usuario a P-UPD-01: "si fecha no es afectada a menos
+que vaya incluida", junto con la revisión de due_date en P-DUE-15 y P-DUE-16.
+
+P-UPD-01. Si se omiten title, completed o priority en PATCH, ¿debe conservarse
+el valor actual de cada campo omitido o habrá un comportamiento por campo?
+Respuesta del usuario: sí; la fecha no se afecta a menos que vaya incluida.
+Estado: RESUELTA; registrada en RN-UPD-01. Se conservan las reglas específicas
+ya acordadas para una fecha enviada como null, cadena vacía o solo espacios.
+
+Desglose y ejemplos de la regla confirmada P-UPD-01
+
+Omitir una propiedad significa no incluir su nombre en el cuerpo JSON.
+Por ejemplo, {"title":"Informe final"} omite completed y priority.
+Enviar {"completed":false} sí proporciona completed: false es un valor
+explícito, no una omisión. Lo mismo ocurre al enviar null o "": la propiedad
+está presente y debe seguir sus propias reglas de aceptación y efecto.
+
+Estado inicial ilustrativo, independiente para cada ejemplo:
+{"title":"Preparar informe","completed":true,"priority":"high"}
+
+Comportamiento confirmado: aplicar las reglas de cada campo enviado y
+conservar el valor de cada campo omitido.
+
+Caso A. Solo cambia title
+Solicitud PATCH: {"title":"Informe final"}
+Resultado esperado según la regla confirmada:
+{"title":"Informe final","completed":true,"priority":"high"}
+Se modifica el título; completed y priority conservan sus valores.
+
+Caso B. Solo cambia completed
+Solicitud PATCH: {"completed":false}
+Resultado esperado según la regla confirmada:
+{"title":"Preparar informe","completed":false,"priority":"high"}
+Se cambia a pendiente; title y priority conservan sus valores.
+
+Caso C. Solo cambia priority
+Solicitud PATCH: {"priority":"low"}
+Resultado esperado según la regla confirmada:
+{"title":"Preparar informe","completed":true,"priority":"low"}
+Se cambia la prioridad; title y completed conservan sus valores.
+
+Decisiones confirmadas por campo:
+- title omitido: se conserva el título actual.
+- completed omitido: se conserva el estado actual, incluso cuando sea true.
+- priority omitido: se conserva la prioridad actual, incluso si es high o low.
+- due_date omitido: se conserva su valor actual.
+
+El valor predeterminado medium está definido para CREAR una tarea sin
+priority. En PATCH se conserva la prioridad que ya tiene la tarea cuando
+no se incluye ese campo, conforme a RN-UPD-01.
+
+Un PATCH sin propiedades ({}) devuelve 400 según P-UPD-02, resuelta en G-04.
+
+P-UPD-02. PATCH vacío y propiedades no permitidas
+Estado: RESUELTA e implementada por aprobación de G-04.
+PATCH {} devuelve 400 con field body e indica que se requiere al menos uno
+de title, completed, priority o due_date. Cada propiedad desconocida genera
+su propio error 400; una solicitud con solo propiedades desconocidas informa
+esas propiedades y no se describe como un objeto vacío.
+POST permite title, priority y due_date; PATCH permite además completed.
+id y created_at no se aceptan en ninguno; completed no se acepta en POST.
+Ambos requieren un objeto JSON y rechazan arreglos, null y valores simples.
+Motivos aceptados: detectar errores de nombres y exigir cambios explícitos.
+Las reglas específicas de due_date vacío y espacios siguen en RN-DUE-09/10.
+
+P-UPD-03. Solicitudes con campos válidos e inválidos
+Estado: RESUELTA e implementada por aprobación de G-04.
+La solicitud completa se rechaza con 400 antes de escribir. Se conservan
+todos los campos de la tarea, incluso cuando alguno de los cambios sea válido.
+Motivo aceptado: resultado predecible; el cliente corrige la solicitud antes
+de modificar la tarea. Se comprobó con un trigger que no ocurre ningún UPDATE.
+
+ACTIVIDAD 1.1 — EJEMPLOS DE SOLICITUDES Y RESPUESTAS
+
+Estos son ejemplos de contrato para documentar las reglas. No son resultados
+de solicitudes ejecutadas ni evidencia de implementación.
+Para los ejemplos de fechas, se supone que hoy es 2026-09-10 en el equipo
+que ejecuta la API. Los ejemplos son independientes entre sí.
+Se muestran fragmentos de las respuestas de tareas; id y created_at serán
+generados por la aplicación, como ocurre en el comportamiento actual.
+HTTP 201 al crear y HTTP 200 al actualizar corresponden al código inicial.
+
+E-01. Crear con los campos opcionales omitidos
+Solicitud: POST /tasks
+Cuerpo: {"title":"Preparar informe"}
+Resultado esperado: HTTP 201.
+Fragmento de respuesta:
+{"title":"Preparar informe","completed":false,"priority":"medium","due_date":null}
+Fundamento: comportamiento actual de creación, RN-PRI-02 y RN-DUE-01/05.
+
+E-02. Crear con prioridad y fecha explícitas
+Solicitud: POST /tasks
+Cuerpo: {"title":"Preparar informe","priority":"high","due_date":"2026-09-10 10:00:00"}
+Resultado esperado: HTTP 201, incluso si la hora actual de ese día ya pasó
+de las 10:00, porque la comparación es por día.
+Fragmento de respuesta:
+{"title":"Preparar informe","completed":false,"priority":"high","due_date":"2026-09-10 10:00:00"}
+Fundamento: RN-PRI-04 y RN-DUE-04/12.
+
+E-03. Crear sin fecha mediante null, cadena vacía o solo espacios
+Solicitud: POST /tasks. Cada cuerpo representa un caso independiente:
+{"title":"Preparar informe","due_date":null}
+{"title":"Preparar informe","due_date":""}
+{"title":"Preparar informe","due_date":"   "}
+Resultado esperado en cada caso: HTTP 201.
+Fragmento de respuesta: {"priority":"medium","due_date":null}
+Fundamento: RN-PRI-02 y RN-DUE-05/06/07/09.
+El valor interno de SQLite será NULL, conforme a RN-DUE-14.
+
+E-04. Actualizar el título omitiendo due_date
+Estado inicial: la tarea 7 tiene due_date "2026-09-11 14:30:00".
+Solicitud: PATCH /tasks/7
+Cuerpo: {"title":"Informe final"}
+Resultado esperado: HTTP 200.
+Fragmento de respuesta: {"title":"Informe final","due_date":"2026-09-11 14:30:00"}
+Fundamento: actualización actual del título y RN-DUE-08.
+Los demás campos omitidos conservan sus valores, conforme a RN-UPD-01.
+
+E-05. Eliminar la fecha con una cadena vacía exacta en PATCH
+Estado inicial: la tarea 7 tiene due_date "2026-09-11 14:30:00".
+Solicitud: PATCH /tasks/7
+Cuerpo: {"due_date":""}
+Resultado esperado: HTTP 200.
+Fragmento de respuesta: {"due_date":null}.
+SQLite guarda NULL al procesar la solicitud. Los campos omitidos se conservan.
+Fundamento: RN-DUE-10, RN-UPD-01 y P-DUE-15. Enviar "" es una petición
+deliberada de eliminación y no requiere esperar al final del día.
+
+E-06. Quitar la fecha con null en PATCH
+Estado inicial: la tarea 7 tiene due_date "2026-09-11 14:30:00".
+Solicitud: PATCH /tasks/7
+Cuerpo: {"due_date":null}
+Resultado esperado: HTTP 200.
+Fragmento de respuesta: {"due_date":null}
+Fundamento: RN-DUE-05/06.
+
+E-07. Rechazar una prioridad inválida
+Solicitud: POST /tasks
+Cuerpo: {"title":"Preparar informe","priority":"HIGH"}
+Resultado confirmado: HTTP 400. Debe identificar priority, indicar los textos
+exactos low, medium y high, y explicar que se puede omitir para usar medium.
+Lo mismo aplica a " high ", "", null y solo espacios.
+Fundamento: RN-PRI-03/05/06. El JSON literal implementado está en E-08.
+
+E-08. Catálogo implementado de errores de validación
+Estado: APROBADO e IMPLEMENTADO para el cuerpo de POST/PATCH.
+Todos estos casos responden HTTP 400. Se conserva el arreglo errors incluso
+con un error; cada entrada contiene field y message. Mensajes en inglés.
+Se informan todos los campos inválidos, una entrada por campo. Orden de campos
+conocidos: title, completed, priority, due_date. Propiedades no permitidas:
+después de los conocidos, por nombre. Errores del cuerpo: field body.
+La redacción fue delegada y el idioma inglés fue indicado expresamente.
+El catálogo siguiente fue generado desde el validador implementado. Los
+mensajes de calendario y día anterior también se aplican a PATCH; title,
+cuerpo no objeto y propiedades no permitidas se aplican a ambas operaciones.
+El nombre mostrado en el mensaje de propiedad no permitida es el recibido.
+
+Title (POST):
+{
+  "errors": [
+    {
+      "field": "title",
+      "message": "Field \"title\" must be a non-empty string; it is required when creating a task."
+    }
+  ]
+}
+
+Priority on creation (POST):
+{
+  "errors": [
+    {
+      "field": "priority",
+      "message": "Field \"priority\" must be exactly \"low\", \"medium\", or \"high\", in lowercase with no spaces. Omit \"priority\" when creating a task to use \"medium\"."
+    }
+  ]
+}
+
+Priority on update (PATCH):
+{
+  "errors": [
+    {
+      "field": "priority",
+      "message": "Field \"priority\" must be exactly \"low\", \"medium\", or \"high\", in lowercase with no spaces. Omit \"priority\" when updating to keep its current value."
+    }
+  ]
+}
+
+Due date format/type on creation (POST):
+{
+  "errors": [
+    {
+      "field": "due_date",
+      "message": "Field \"due_date\" must be a string in YYYY-MM-DD HH:mm:ss format, without a timezone, fractional seconds, surrounding spaces, tabs, or line breaks. Omit \"due_date\", or send null, an empty string, or ASCII spaces only to create without a due date."
+    }
+  ]
+}
+
+Due date format/type or spaces on update (PATCH):
+{
+  "errors": [
+    {
+      "field": "due_date",
+      "message": "Field \"due_date\" must be a string in YYYY-MM-DD HH:mm:ss format, without a timezone, fractional seconds, surrounding spaces, tabs, or line breaks. Send null or an empty string to remove the date; omit \"due_date\" to keep it. Spaces-only strings are not allowed."
+    }
+  ]
+}
+
+Invalid calendar/time (POST):
+{
+  "errors": [
+    {
+      "field": "due_date",
+      "message": "Field \"due_date\" must contain a valid calendar date and time in YYYY-MM-DD HH:mm:ss format."
+    }
+  ]
+}
+
+Past calendar day (POST):
+{
+  "errors": [
+    {
+      "field": "due_date",
+      "message": "Field \"due_date\" must fall on today or a future day, based on the API machine's local date. Use YYYY-MM-DD HH:mm:ss."
+    }
+  ]
+}
+
+Completed (PATCH):
+{
+  "errors": [
+    {
+      "field": "completed",
+      "message": "Field \"completed\" must be a boolean: true or false."
+    }
+  ]
+}
+
+Unknown property (POST):
+{
+  "errors": [
+    {
+      "field": "id",
+      "message": "Field \"id\" is not allowed in this operation."
+    }
+  ]
+}
+
+Non-object body (POST):
+{
+  "errors": [
+    {
+      "field": "body",
+      "message": "The request body must be a JSON object."
+    }
+  ]
+}
+
+Empty update (PATCH):
+{
+  "errors": [
+    {
+      "field": "body",
+      "message": "Provide at least one of \"title\", \"completed\", \"priority\", or \"due_date\" to update."
+    }
+  ]
+}
+
+Ejemplo de varios campos inválidos en PATCH:
+{"title":"","completed":"true","priority":"HIGH"}
+Devuelve 400 con los mensajes title, completed y priority de este catálogo,
+en ese orden, y conserva íntegra la tarea. No existe una escritura parcial.
+Las respuestas por ID inválido, tarea inexistente o capacidad conservan
+su propiedad error y redacción en inglés; G-01 define la validación del cuerpo.
+JSON mal formado ocurre antes de Zod; G-07 se resolvió posteriormente mediante
+el contrato central de errores registrado en RN-VAL-02 a RN-VAL-05.
+
+P-ERR-01. Estructura, idioma y mensajes de validación
+Estado: RESUELTA e implementada por G-01. La propuesta anterior de un solo
+error en español quedó sustituida por {"errors":[{"field":"...","message":"..."}]}.
+El usuario indicó: "la redaccion siempre en ingles". Aceptó delegar la redacción
+literal, manteniendo campo, causa e indicaciones para corregir la entrada.
+El catálogo E-08 registra los mensajes reales. El formato de fechas y la
+prohibición de días anteriores ya estaban confirmados; no se reabrieron.
+
+P-ERR-02. Múltiples campos inválidos y orden
+Estado: RESUELTA e implementada por G-01. Informar todos los campos inválidos,
+una entrada por campo. Orden: title, completed, priority, due_date; después,
+propiedades no permitidas ordenadas por nombre. En POST, completed es una
+propiedad no permitida, no un campo del contrato de creación.
+Motivo aceptado: permitir corregir la solicitud sin descubrir errores por turnos.
+
+P-DUE-14. Tipos, espacios alrededor de fechas, tabuladores y saltos de línea
+Estado: RESUELTA e implementada por G-02. Rechazar con 400 tipos distintos
+de texto/null, fechas con espacios alrededor y cualquier tabulador o salto
+de línea. No convertir tipos ni recortar la fecha automáticamente.
+POST acepta omisión, null, cadena vacía exacta y solo espacios ASCII como
+ausencia. PATCH conserva al omitir, elimina con null o cadena vacía exacta
+y rechaza solo espacios. Motivo aceptado: exigir la nomenclatura acordada.
+E-08 contiene las indicaciones específicas de cada operación.
+
+E-09. Rechazar solo espacios en PATCH
+Estado inicial: la tarea 7 tiene due_date "2026-09-11 14:30:00".
+Solicitud: PATCH /tasks/7
+Cuerpo: {"due_date":"   "}
+Resultado confirmado: HTTP 400. La fecha existente se conserva.
+Contenido requerido del error: identificar due_date, indicar el formato
+YYYY-MM-DD HH:mm:ss y explicar que null o "" quitan la fecha, mientras que
+omitir la propiedad la conserva. Los espacios no son una cadena vacía válida
+para PATCH. La respuesta está implementada en el mensaje de formato PATCH
+de E-08. Si también se envían cambios válidos, tampoco se aplican (P-UPD-03).
+Fundamento: RN-DUE-09, P-DUE-16 y justificación J-06.
+
+ACTIVIDADES 1.2 Y 1.3 — RESPALDO, ESQUEMA Y COMPARACIÓN
+
+RN-DB-01. Respaldo antes de actualizar
+Antes de actualizar el esquema debe conservarse una copia de la base anterior
+para comprobar que sus datos se mantuvieron íntegros.
+El usuario autorizó crear una copia nueva por ejecución en data/backups,
+identificada por fecha y hora. No se sobrescriben los respaldos anteriores.
+
+RN-DB-02. Conservación de los datos existentes
+Después de la actualización se comparan las tareas con el respaldo, usando
+sus identificadores. Los campos existentes deben conservar sus valores.
+En la base inicial esos campos eran id, title, completed y created_at.
+La comparación abarca metadatos y valores de todas las columnas de tasks,
+incluidos los resultados de columnas calculadas, y su fila en sqlite_sequence.
+No compara el contenido de otras tablas ni todo el DDL de la base. La integridad
+y las claves foráneas se comprueban aparte y no prueban igualdad con el respaldo.
+El conteo y los identificadores deben permitir comprobar que no se perdieron
+ni duplicaron tareas durante el proceso.
+
+RN-DB-03. Valores de los campos agregados
+Las tareas del esquema anterior recibirán due_date = NULL y priority = 'medium'
+al agregarse las columnas faltantes. La incorporación de estos valores no
+debe alterar los campos que esas tareas ya tenían.
+Fuente: instrucción explícita del usuario sobre la base anterior y la nueva.
+
+RN-DB-04. Reinicios sin duplicación
+Se debe verificar que reiniciar mantenga los datos y no duplique las tareas
+de ejemplo. La existencia de un respaldo no sustituye esta comprobación.
+Fuente: actividad del plan retomada por el usuario.
+
+RN-DB-05. Archivo y ejecución explícita
+Se actualiza el mismo data/tasks.db conservando sus tareas. El respaldo y
+la comprobación se ejecutan mediante el comando específico npm run db:update;
+no forman parte de cada arranque de la API.
+Fuente: P-DB-01, P-DB-02 y P-DB-04. Fundamento registrado en J-09.
+
+RN-DB-06. Cancelación con diagnóstico del origen
+Si la actualización o su comprobación falla, se cancela la actualización,
+se conservan los datos anteriores y se informa dónde se produjo el error.
+La transacción revierte sus cambios; el diagnóstico identifica la etapa y,
+cuando hay una diferencia de datos, la tabla, la tarea y el campo afectados.
+Fuente: P-DB-03 y mecanismo aprobado en P-DB-04. Fundamento en J-08 y J-09.
+Los errores de comparación incluyen expected y actual; taskId se incluye
+cuando la diferencia corresponde a una tarea concreta. Para una tarea faltante,
+expected es su ID y actual es null. Conteo y secuencia no tienen un taskId propio.
+
+RN-DB-07. Rechazar un esquema existente incompatible
+La migración debe validar también las columnas priority y due_date que ya
+existan. Si son incompatibles, cancela e informa sin repararlas automáticamente
+ni modificar sus datos. La API impide el arranque cuando faltan las columnas
+o el esquema es incompatible; el mensaje identifica la causa y, si falta migrar,
+indica npm run db:update. La validación ocurre antes de insertar datos de ejemplo.
+Fuente: respuesta explícita del usuario a P-REV-01 tras la revisión técnica.
+
+P-REV-01. ¿Cancelar una migración incompatible sin reparar los datos e impedir
+el arranque de una API sin migrar o incompatible, indicando la causa?
+Respuesta del usuario: "Sí, cancelar e informar sin reparar automáticamente".
+Estado: RESUELTA. Justificación: evitar declarar éxito o servir respuestas
+que no cumplen el esquema y los tipos públicos, según los hallazgos 1 y 3.
+
+RN-ID-01. Identificadores numéricos exactos
+Los IDs públicos siguen siendo números JSON enteros positivos seguros, entre
+1 y 500000, ambos incluidos. PATCH y DELETE rechazan con 400 fracciones, exponentes
+y valores fuera del rango antes de acceder a la tarea. La conversión verifica
+los dígitos del texto recibido antes de convertirlo a número.
+La API no arranca si la base contiene IDs fuera del rango admitido. Los valores
+SQLite se leen exactamente y se comprueban antes de convertirlos al JSON.
+Los ceros iniciales conservan su aceptación anterior; no se decidió prohibirlos.
+Fuente: P-REV-02 y P-ID-01. Justificación técnica: evitar modificar una tarea mediante un ID
+redondeado y evitar que dos IDs distintos aparezcan iguales en la respuesta.
+El máximo de negocio fue elegido por el usuario; fundamento en J-11.
+
+RN-ID-02. Creación al alcanzar el límite
+Si la siguiente creación requiere un ID superior a 500000, responde HTTP 400
+indicando que no se puede crear porque se alcanzó el límite. No crea la tarea
+ni altera la secuencia anterior. Respuesta implementada:
+{"error":"Cannot create a task because the ID limit (500000) has been reached."}
+Se comprueban el mayor ID existente y la secuencia dentro de la misma transacción.
+Se conserva AUTOINCREMENT: borrar el último ID no reinicia la secuencia.
+Fuente: P-ID-02 y confirmación de ejecución de P-REV-03. Fundamento en J-11.
+
+P-ID-01. ¿Qué valor máximo permitir para los IDs, con mínimo 1 ya acordado?
+Respuesta del usuario: "500000".
+Estado: RESUELTA e implementada. El rango vigente es 1..500000; sustituye
+el máximo anterior 9007199254740991, sin cambiar la representación numérica.
+
+P-ID-02. ¿Qué devolver si crear una tarea requiere un ID superior a 500000,
+sin crearla ni alterar la secuencia?
+Respuesta del usuario: "400: no se puede crear porque se alcanzó el límite".
+Estado: RESUELTA e implementada. Verificación HTTP y de persistencia completada.
+
+P-REV-02. ¿Mantener IDs como números positivos seguros, rechazar rutas con
+fracciones, exponentes o valores fuera del rango, y bloquear el arranque ante
+IDs existentes que no puedan representarse exactamente?
+Respuesta del usuario: "Sí, mantener números dentro del rango seguro".
+Estado: RESUELTA. El máximo inicialmente aceptado fue sustituido por P-ID-01;
+se mantienen la representación numérica, la lectura exacta y los rechazos.
+
+Decisiones confirmadas para esta implementación
+
+- Implementar ahora el respaldo, la actualización del esquema y la comparación.
+- Crear una copia nueva por ejecución en data/backups con fecha y hora.
+- Usar NULL para la nueva fecha ausente y 'medium' para la prioridad faltante.
+- Actualizar el mismo data/tasks.db, conservando sus tareas.
+- Ejecutar el respaldo y la comprobación mediante un comando específico;
+  no agregarlos a cada arranque de la API.
+- Si se detecta un fallo o cambio inesperado, cancelar la actualización,
+  conservar la base original e identificar de dónde proviene el error.
+
+P-DB-01. ¿Se actualiza el mismo data/tasks.db después de respaldarlo o se
+genera otro archivo de base de datos?
+Respuesta del usuario: en el mismo data/tasks.db, conservando sus tareas.
+Estado: RESUELTA.
+
+P-DB-02. ¿El respaldo y la comprobación se ejecutan en cada arranque de la API
+o únicamente mediante un comando específico de actualización?
+Respuesta del usuario: solo al ejecutar un comando específico de actualización.
+Estado: RESUELTA.
+
+P-DB-03. Si la comprobación falla o cambia un dato anterior, ¿se cancela la
+actualización, se conserva la base original y se reporta el error?
+Respuesta del usuario: es correcto, especificando dónde nace el error.
+Estado: RESUELTA.
+
+P-DB-04. ¿Se usará npm run db:update, respaldo nativo de SQLite y una
+transacción que revierta los cambios ante una comparación fallida, mostrando
+la etapa y el campo afectados?
+Respuesta del usuario: "ok procede a la ejecucion".
+Estado: RESUELTA; mecanismo implementado en src/database-update.ts y
+src/scripts/update-database.ts, mediante npm run db:update.
+
+P-DB-05. ¿Se verificarán respaldo, conservación, reinicio y reversión con
+node:test sobre bases temporales, sin agregar dependencias?
+Respuesta del usuario: "ok procede a la ejecucion".
+Estado: RESUELTA; inicialmente se verificaron nueve pruebas de migración
+mediante npm run test:db. La suite fue ampliada durante la revisión técnica;
+su resultado más reciente está registrado en CIERRE G-01 A G-04 al final.
+
+Revisión inicial realizada antes de implementar
+
+- data/tasks.db contiene cuatro tareas y las cuatro columnas originales.
+- Las columnas priority y due_date no existían en esa revisión inicial.
+- La comprobación de integridad de SQLite devolvió ok.
+- Esta revisión previa fue de solo lectura.
+
+Ejecución y comprobación completadas
+
+- npm run build: correcto.
+- npm run test:db: nueve pruebas aprobadas, incluidas conservación de datos
+  en WAL, esquema parcial, ejecuciones repetidas, diagnóstico por campo,
+  reversión tras un fallo, respaldo desactualizado, fallo al respaldar,
+  base inexistente e inicialización repetida sin duplicación.
+- Se ejecutó npm run db:update sobre data/tasks.db con la API detenida.
+- Respaldo original:
+  data/backups/tasks-2026-09-08_20-37-27-790-3a8ac434-2b75-46a0-93c1-f225cc59da69.db
+- Se agregaron priority y due_date. Las cuatro tareas anteriores recibieron
+  priority = 'medium' y due_date = NULL.
+- Una comparación SQL independiente, en ambas direcciones, confirmó cero
+  diferencias en id, title, completed y created_at.
+- Conteo antes y después: cuatro tareas. Secuencia de identificadores intacta.
+- Integridad de la base y del respaldo: ok.
+- La API se reinició; /health y /tasks respondieron HTTP 200, con cuatro tareas.
+- Después del reinicio seguía existiendo un solo respaldo: el comando es explícito.
+- Evidencia guardada en data/database-update-verification.json.
+- Esta ejecución completó almacenamiento, respaldo, comparación y comprobación
+  del reinicio. La exposición de los campos se registró en la siguiente etapa.
+
+ACTIVIDAD 1.4 Y LISTADO DE 1.7 — IMPLEMENTACIÓN Y VERIFICACIÓN
+
+- src/types.ts define Priority como 'low' | 'medium' | 'high'.
+- TaskRow y Task incluyen priority y due_date; la fecha admite string | null.
+- toTask devuelve ambos campos almacenados y conserva completed como booleano.
+- npm run build finalizó correctamente.
+- La conversión se comprobó con fecha presente y ausente, y con ambos estados
+  de completed. No fue necesario modificar tareas para esta comprobación.
+- GET http://localhost:3000/tasks respondió HTTP 200 con cuatro tareas.
+- Todos sus campos y el orden se compararon con SQLite: coinciden; priority
+  es medium y due_date es null en las cuatro tareas anteriores.
+- Respuesta real guardada en data/tasks-endpoint-response.json.
+- En esa etapa faltaba la recepción de los nuevos campos en POST y PATCH.
+  Se completó después con las decisiones y pruebas de CIERRE G-01 A G-04.
+
+REQUISITOS DE LAS ACTIVIDADES RESTANTES
+
+Las reglas de esta sección provienen del README, salvo donde se indica una
+petición del usuario. Su fundamento es cumplir el ticket; no se atribuyen
+al usuario motivos adicionales que no haya expresado. Los filtros están
+completados; lote y parser están implementados y comprobados en la suite de
+74 pruebas y en el servicio local, con su evidencia registrada más adelante.
+P-VAL-01 distingue el alcance anterior y las incorporaciones aprobadas después.
+
+ACTIVIDAD 2 DEL README / ACTIVIDAD 1 DEL PLAN — FILTROS
+
+RN-FIL-01. Estado
+GET /tasks debe permitir filtrar con completed=true y completed=false.
+Fuente: paso 2 del README.
+La selección de ambos estados, completed=true,false, fue solicitada después
+por el usuario y se incorpora en RN-FIL-04/05.
+
+RN-FIL-02. Prioridad
+GET /tasks debe permitir filtrar con priority=low, medium o high.
+Fuente: paso 2 del README.
+La selección de varias prioridades separadas por comas fue solicitada después
+por el usuario y se incorpora en RN-FIL-04/05.
+
+RN-FIL-03. Combinación
+Los filtros de estado y prioridad se pueden combinar en una misma consulta.
+Cuando se proporcionan ambos, la tarea debe cumplir la condición de estado
+Y la condición de prioridad. Dentro de cada filtro se aplica RN-FIL-05.
+Fuente: paso 2 del README y ejemplo del usuario:
+?completed=false&priority=low,high significa pendientes de prioridad baja o alta.
+
+RN-FIL-04. Varios valores separados por comas
+Se admite seleccionar varios valores en una misma propiedad de consulta:
+priority=low,medium; priority=low,high; priority=medium,high;
+priority=low,medium,high; y completed=true,false.
+Los valores individuales exigidos por el README siguen formando parte del
+contrato. El catálogo de prioridades y estados permanece igual.
+Fuente: tabla del usuario introducida con "asi deben quedar los filtros".
+Esta ampliación permite listas; sustituye la propuesta anterior del agente
+de exigir un único valor por filtro. Las comas no son parámetros repetidos:
+priority=low,high es un caso distinto de priority=low&priority=high.
+
+RN-FIL-05. Alternativas dentro de un filtro
+Una tarea cumple el filtro si su valor coincide con cualquiera de los
+valores seleccionados: low,medium significa prioridad low O prioridad medium.
+Para completed=true,false se seleccionan ambos estados.
+Fundamento: los resultados "baja o media", "baja o alta" y "media o alta"
+escritos por el usuario. No se exige que una tarea tenga varias prioridades.
+
+RN-FIL-06. Ausencia de filtros y selección del catálogo completo
+/tasks devuelve todas las tareas.
+?completed=true,false&priority=low,medium,high selecciona todos los estados
+y todas las prioridades, por lo que devuelve el mismo conjunto de tareas.
+Esta equivalencia se sostiene en el catálogo vigente de tareas: completed
+booleano y priority low, medium o high; no introduce nuevos valores válidos.
+Fuente: primera y última fila de la tabla del usuario.
+
+Ejemplos solicitados y documentados
+
+Consulta                                                Resultado
+/tasks                                                  Todas las tareas.
+/tasks?priority=low,medium                               Prioridad baja o media.
+/tasks?priority=low,high                                 Prioridad baja o alta.
+/tasks?priority=medium,high                              Prioridad media o alta.
+/tasks?completed=false&priority=low,high                 Pendientes de prioridad baja o alta.
+/tasks?completed=true,false&priority=low,medium,high      Todas las tareas; equivalente a /tasks.
+
+Análisis del alcance
+
+La propuesta es coherente: unión de valores dentro del mismo filtro y
+combinación de condiciones entre filtros distintos. Amplía el requisito
+mínimo del README con selección múltiple y conserva sus consultas individuales.
+Los ejemplos anteriores son resultados de contrato solicitados por el usuario.
+Se preparó la consulta parametrizada del modelo y después se conectó al
+controlador con validación Zod. Las selecciones se comprobaron por HTTP
+contra SQLite antes de cambiar la respuesta. P-FIL-02 cerró la representación
+uniforme de la lista y su mensaje; el ajuste está implementado y comprobado en
+la suite de 52 pruebas y en las consultas al servicio local contra SQLite.
+El usuario no proporcionó una justificación adicional para elegir comas.
+
+P-FIL-01. Casos restantes de entrada y respuesta
+Estado: RESUELTA para validación de entradas, repeticiones y errores. El usuario
+confirmó los cuatro puntos y añadió: "y informar como es llenado", "la 3 es
+correcto y infomamos no hay coincidencias" y "asi debe ser en ingles el orden
+esta bien". El código 200 sin coincidencias está confirmado. La representación
+del mensaje informativo adicional se resolvió después en P-FIL-02.
+
+RN-FIL-07. Entradas incorrectas
+Rechazar toda la consulta con HTTP 400 ante valores fuera del catálogo,
+vacíos, elementos vacíos por comas sobrantes, espacios, mayúsculas,
+parámetros desconocidos, arreglos u objetos.
+Ejemplos: priority=urgent, priority=low,urgent, priority=, priority=low,,high,
+priority=LOW, priority=low,%20high, priority[]=low y priority[value]=high.
+No recortar, convertir mayúsculas ni aplicar parcialmente los filtros válidos.
+El mensaje identifica la entrada y explica cómo enviarla correctamente.
+Fuente: confirmación expresa del punto 1 y petición de informar cómo llenarlo.
+
+RN-FIL-08. Repeticiones
+HTTP 400 para valores duplicados dentro de una lista, como priority=low,low,
+y para parámetros repetidos, como priority=low&priority=high. También se
+rechaza repetir un parámetro con el mismo valor. Se identifica la repetición
+y se explica que cada parámetro aparece una vez, con selecciones únicas
+separadas por comas. Fuente: confirmación expresa del punto 2.
+
+RN-FIL-09. Contrato de errores de consulta
+HTTP 400 con {"errors":[{"field":"...","message":"..."}]}.
+Mensajes en inglés, una entrada por campo, primero completed, luego priority
+y finalmente los parámetros desconocidos ordenados por nombre. El arreglo se
+mantiene con un solo error. Debe indicarse cómo llenar los filtros correctamente.
+Fuente: confirmación expresa del punto 4 y del idioma y orden.
+Zod valida las entradas. La consulta al modelo solo ocurre si toda la
+validación es correcta; un filtro válido no se aplica si otro es inválido.
+
+RN-FIL-10. Consulta válida sin coincidencias
+Responder HTTP 200 con el JSON exacto:
+{"tasks":[],"message":"No matching tasks found."}
+Aplica tanto a filtros válidos sin coincidencias como a /tasks sin filtros
+cuando la tabla está vacía. El mensaje es informativo y está en inglés.
+Fuente: petición de informar que no hay coincidencias y aprobación posterior
+de P-FIL-02. Sustituye el cuerpo histórico [] sin alterar el código 200.
+
+RN-FIL-11. Respuesta exitosa uniforme del listado
+Toda respuesta exitosa de GET /tasks contiene las propiedades tasks y message.
+tasks es siempre un arreglo de tareas con sus campos públicos, ordenadas por ID
+ascendente. Si contiene tareas, message es null; si está vacío, aplica RN-FIL-10.
+Ejemplo de estructura con resultados: {"tasks":[...],"message":null}.
+El consumidor debe leer response.tasks. Este cambio sustituye expresamente el
+arreglo directo anterior, incluso cuando hay coincidencias. No se alternan
+arreglo y objeto según la cantidad de resultados. Los errores 400 conservan
+RN-FIL-09; tampoco cambian las respuestas de POST/PATCH.
+El controlador construye el contrato usando el tipo compartido TaskListResponse;
+el modelo conserva su responsabilidad de consultar y devolver los datos.
+
+P-FIL-02. Representación del mensaje cuando no hay coincidencias
+Estado: RESUELTA. Respuesta expresa del usuario: "lo apruebo".
+La aprobación se dio a la propuesta de formato uniforme tasks/message, pruebas
+del cuerpo completo y catálogo compartido de prioridades. Se explicó antes
+de solicitarla que reemplazar el arreglo directo cambia el contrato actual
+y requiere actualizar los consumidores, los ejemplos y las pruebas.
+Decisión vigente: RN-FIL-10 y RN-FIL-11. Se descarta la propuesta anterior de
+envolver únicamente el caso vacío, porque alternaría dos formas de respuesta.
+Justificación presentada por el agente y aprobada: un contrato predecible
+permite leer siempre response.tasks, tanto con resultados como sin ellos.
+
+AJUSTES DE CALIDAD APROBADOS CON P-FIL-02
+
+- Verificar el cuerpo JSON completo con resultados, con filtros sin
+  coincidencias y con una tabla vacía, además del código HTTP y los datos de
+  SQLite. Motivo presentado y aprobado: comprobar solo 200 dejaría pasar
+  respuestas que contienen tareas incorrectas o un formato equivocado.
+- Definir PRIORITIES en src/types.ts y derivar de ese catálogo el tipo Priority
+  y las validaciones Zod de POST/PATCH y filtros. Los valores siguen siendo
+  low, medium y high; no cambia ninguna entrada válida ni su mensaje de error.
+  Motivo presentado y aprobado: evitar que las distintas operaciones acepten
+  prioridades diferentes por mantener catálogos repetidos.
+- Conservar routes, controllers, models y schemas en archivos .ts, con las
+  consultas SQL parametrizadas y la validación antes de consultar el modelo.
+  Las mejoras de rendimiento deben responder a mediciones; no se añade
+  paginación a este ajuste porque modificaría el listado completo acordado.
+- Estado: ajustes implementados y comprobados en la suite con Node 20.20.2:
+  52 pruebas aprobadas, cero fallidas/omitidas/canceladas; compilación correcta.
+  Evidencia: data/list-contract-tests.log y data/list-contract-build.log.
+  Servicio activo en localhost:3000 con Node 20.20.2: 15 consultas HTTP
+  comprobadas, respuestas completas y preservación de las cuatro tareas,
+  columnas y secuencia. Integridad SQLite: ok. Evidencia local:
+  data/list-contract-before.json y data/list-contract-verification.json.
+  Las 51 pruebas del bloque histórico siguiente corresponden al contrato
+  anterior del listado.
+
+Ejemplos de errores implementados
+
+priority=low,urgent:
+{"errors":[{"field":"priority","message":"Query parameter \"priority\" contains an invalid value. Use one or more of \"low\", \"medium\", or \"high\", separated by commas, in lowercase, without spaces or empty list items. Example: priority=low,high."}]}
+
+priority=low,low:
+{"errors":[{"field":"priority","message":"Query parameter \"priority\" must not repeat values. Include each selected value once. Example: priority=low,high."}]}
+
+priority=low&priority=high:
+{"errors":[{"field":"priority","message":"Query parameter \"priority\" must appear only once. Use a comma-separated list instead. Example: priority=low,high."}]}
+
+Estos mensajes se acompañan de HTTP 400. El catálogo completo y las pruebas
+están en src/schemas/task-filters.schema.ts y tests/api-safety.test.ts.
+
+DESARROLLO INICIADO — CONSULTA DE FILTROS EN EL MODELO
+
+- TaskFilters representa las selecciones de estado y prioridad en TypeScript.
+- listTasks del modelo acepta filtros opcionales, usa IN con parámetros SQL
+  dentro de cada filtro y AND entre ambos, conservando el orden por ID ascendente.
+- Se comprobaron las seis selecciones de la tabla del usuario, los filtros
+  individuales y una combinación adicional sobre seis tareas de una base temporal.
+- La prueba comprobó resultados exactos, equivalencia de todos los valores con
+  el listado completo y conservación de filas y secuencia.
+- Node 20.20.2: 45 pruebas aprobadas, cero fallidas/omitidas/canceladas;
+  compilación correcta. Evidencia: data/filter-model-tests.log y
+  data/filter-model-build.log.
+- En esa etapa el controlador todavía no recibía filtros. La integración
+  posterior se registra a continuación; se conserva esta evidencia del modelo.
+
+EVIDENCIA HISTÓRICA — INTEGRACIÓN HTTP ANTERIOR A P-FIL-02
+
+- El controlador valida completed y priority mediante Zod antes de consultar.
+- La lectura nativa de parámetros conserva cada aparición y los nombres de
+  arreglos/objetos, para que Express no oculte repeticiones ni claves desconocidas.
+- Se probaron por HTTP las seis consultas, valores individuales, orden de
+  selecciones, comas codificadas, tipos/formas inválidas, repeticiones y errores
+  múltiples. Cada respuesta correcta se contrastó con los campos de SQLite.
+- Se comprobó el rechazo antes de consultar el modelo incluso con una fila
+  externa inválida, y la conservación de filas y secuencia.
+- En esa etapa, la consulta sin coincidencias respondía 200 y []; el mensaje
+  seguía pendiente. P-FIL-02 se resolvió posteriormente con el objeto uniforme.
+- Node 20.20.2: 51 pruebas aprobadas, cero fallidas/omitidas/canceladas;
+  compilación correcta. Evidencia: data/filter-http-tests.log,
+  data/filter-http-build.log y data/filters-http-evidence.json.
+- Servicio activo con estos filtros en Node 20.20.2. Se comprobaron respuestas
+  200 y 400 sobre la base local, el orden de errores y la conservación de sus
+  cuatro tareas, columnas y secuencia. Integridad de SQLite: ok.
+  Evidencia local: data/filter-http-verification.json y data/fields-verification.json.
+
+ACTIVIDAD 3 — FINALIZACIÓN EN LOTE
+
+RN-BULK-01. Entrada y efecto
+POST /tasks/bulk-complete debe recibir {"ids": number[]} y marcar las tareas
+indicadas como completadas. El cuerpo debe ser un objeto JSON estricto con
+solo ids: arreglo de entre 1 y 500 elementos únicos. Cada ID debe ser numérico
+y estar entre 1 y 500000. Rechazar con 400 ids omitido, arreglo vacío o de más
+de 500 elementos, duplicados, tipos incorrectos y propiedades desconocidas.
+Fuente: paso 3 del README y aprobación de P-BULK-01/G-06.
+
+RN-BULK-02. Resultado
+Responder HTTP 200 con {"updated":n}, contando únicamente las tareas que
+cambiaron de completed=false a completed=true. Las tareas ya completadas
+son válidas y no aumentan el contador. Si todas ya estaban completadas,
+responder {"updated":0}. Fuente: aprobación de P-BULK-01/G-06.
+Justificación presentada y aprobada: informar cambios reales, sin contar
+solicitudes repetidas de un estado que la tarea ya tenía.
+
+RN-BULK-03. IDs inexistentes y atomicidad
+Comprobar todos los IDs y modificar las tareas dentro de una transacción
+SQLite inmediata. Si falta cualquiera de ellos, responder HTTP 404 sin
+modificar ninguna tarea. Informar todos los faltantes en orden numérico
+ascendente. Ejemplo para los IDs 8 y 9:
+{"error":"Tasks not found: 8, 9."}
+Un fallo durante la operación revierte todo el lote. Motivo presentado y
+aprobado: evitar cambios parciales y conservar un resultado predecible.
+
+RN-BULK-04. Alcance de la modificación
+Cambiar únicamente completed de las tareas pendientes solicitadas. Conservar
+title, priority, due_date, created_at, id y la secuencia de autoincremento.
+Una fecha límite histórica no se vuelve a validar ni se modifica por completar
+la tarea; el lote no solicita cambiarla. Fuente: aprobación del alcance del lote.
+
+RN-BULK-05. Representación original de los IDs
+Cada elemento numérico debe estar escrito solo con dígitos decimales en el
+JSON original. Rechazar fracciones, exponentes y signos, aunque el resultado
+de convertirlos a Number sea un entero permitido. Ejemplos rechazados:
+1.0, 1e0 y 1.0000000000000001. Las cadenas, null, booleanos, arreglos y objetos
+tampoco son IDs válidos. La sintaxis JSON sigue siendo estricta.
+Justificación presentada y aprobada: evitar que la conversión o el redondeo
+borren la diferencia entre el ID recibido y el ID que se pretende modificar.
+
+RN-BULK-06. Contrato de errores de entrada
+HTTP 400 con {"errors":[{"field":"ids","message":"..."}]}.
+Un error por campo, ids primero y propiedades desconocidas después en orden
+alfabético. Los mensajes están en inglés y explican la corrección. Un error
+de elemento incluye su índice comenzando en cero en el mensaje, conservando
+field: "ids"; un cuerpo que no es objeto usa field: "body".
+Rechazar toda la solicitud antes de modificar datos si alguna entrada es inválida.
+
+RN-BULK-07. Propiedad ids repetida en el JSON original
+Si el cuerpo contiene varias propiedades ids, responder 400 y pedir una sola
+propiedad ids; no aceptar silenciosamente la última aparición. Decisión técnica
+dentro del criterio delegado por el usuario: conservar las apariciones originales
+para impedir que JSON.parse oculte la ambigüedad de la solicitud.
+
+P-BULK-01. Acordar el contador y la respuesta, IDs repetidos o inexistentes,
+tareas ya completadas, lista vacía, validación del arreglo, entradas mixtas
+válidas e inválidas y comportamiento ante un fallo durante la operación.
+El rango público de los IDs ya está confirmado en RN-ID-01: 1..500000.
+Estado: RESUELTA, al igual que G-06. Fuente: aprobación expresa de todas las
+propuestas de actividades 2 y 3, seguida de
+"con firmo todo lo anterio r usa tu criterio en ti si confio date".
+Las decisiones vigentes son RN-BULK-01 a RN-BULK-07. La propuesta histórica
+de ignorar IDs inexistentes queda sustituida por el rechazo completo con 404;
+los duplicados se rechazan con 400 y no se eliminan automáticamente.
+Implementación comprobada mediante la suite de 74 pruebas con Node 20.20.2,
+compilación correcta y verificación del servicio local contra SQLite.
+La evidencia anterior de 63 pruebas corresponde al cierre de inicialización.
+
+DECISIÓN TÉCNICA DE VALIDACIÓN DEL LOTE — CRITERIO DELEGADO
+
+Se incorpora únicamente jsonc-parser 3.3.1 de Microsoft, fijado exactamente y
+sin dependencias de ejecución adicionales. El hook del parser captura los
+bytes originales antes de JSON.parse. Después del parseo de Express, el
+scanner obtiene posiciones y texto originales de números y propiedades para
+las validaciones Zod, antes de acceder a SQLite. No reemplaza las reglas de
+negocio ni habilita comentarios o comas finales.
+Express conserva el parser JSON estricto y rechaza esas formas no válidas.
+Motivo técnico: JSON.parse convierte los números antes de que Zod los reciba,
+por lo que validar solo Number no permite distinguir 1 de 1.0 o 1e0, ni
+detectar todas las grafías afectadas por redondeo o propiedades sobrescritas.
+La elección concreta de esta dependencia aplica el criterio de implementación
+delegado; no se presenta como una versión elegida textualmente por el usuario.
+Se mantienen Node 20.20.2 para comprobar, el mínimo Node 20+, better-sqlite3
+11.10.0 y la arquitectura .ts existente. Archivos añadidos:
+src/schemas/bulk-complete.schema.ts, src/middleware/json-body.ts y
+src/middleware/error-handler.ts. No se amplía aquí la refactorización de la
+actividad 8 ni se cambian prioridades, migración o contratos ya aprobados.
+El archivo de bloqueo se comparó con data/bulk-lock-before.json: aparte de
+jsonc-parser 3.3.1 y la entrada de dependencia en la raíz, permanece idéntico.
+
+ACTIVIDAD 4 — VALIDACIÓN
+
+RN-VAL-01. Entradas inválidas
+Los endpoints de creación, actualización y finalización en lote deben validar
+las entradas y devolver respuestas 400 claras cuando sean inválidas.
+Fuente: paso 4 del README. Para priority, el contenido requerido del error
+se especifica además en RN-PRI-05 por petición del usuario, justificada en J-02.
+
+P-VAL-01. Herramienta y cobertura de validación
+Estado: RESUELTA para Zod 4.5.4, objetos JSON, campos permitidos y validación
+de title, completed, priority y due_date en POST/PATCH. Zod se reutilizará
+en las siguientes actividades por indicación expresa: "siempre zod".
+title conserva el recorte y rechazo de texto vacío de la API inicial;
+completed se valida como booleano en PATCH. IDs siguen RN-ID-01.
+P-ERR-01/02, P-DUE-14 y P-UPD-02/03 quedaron resueltas e implementadas.
+G-07 quedó RESUELTO con la aprobación de actividades 2 y 3: aplicar el contrato
+central de RN-VAL-02 a RN-VAL-05. La validación del arreglo del lote quedó
+RESUELTA en P-BULK-01/G-06, por aprobación expresa, no por suposición desde
+POST/PATCH. Estas incorporaciones están implementadas y comprobadas en la
+suite de 74 pruebas y en el servicio local contra SQLite. Las
+comprobaciones previas de POST/PATCH conservan su evidencia histórica.
+
+RN-VAL-02. JSON mal formado antes de Zod
+Responder HTTP 400 con el cuerpo exacto:
+{"errors":[{"field":"body","message":"Invalid JSON. Use double quotes and remove trailing commas."}]}
+El parser actúa antes de Zod y antes de acceder al modelo. Mantener JSON
+estricto, incluidas comillas dobles y rechazo de comentarios y comas finales.
+Fuente: aprobación de G-07. Motivo: responder de forma clara y coherente incluso
+cuando la solicitud no llega a las validaciones de sus campos.
+
+RN-VAL-03. Tamaño y codificación del cuerpo
+El límite del cuerpo es 100 KB, equivalente a 102400 bytes. Si se supera,
+responder HTTP 413 con:
+{"errors":[{"field":"body","message":"Request body is too large. Maximum size is 100 KB."}]}
+Ante un charset o Content-Encoding no compatible, responder HTTP 415 con:
+{"errors":[{"field":"body","message":"Unsupported request encoding. Use UTF-8 JSON with a supported content encoding."}]}
+Fuente: contrato de errores aprobado en G-07. Las solicitudes rechazadas por
+el parser no producen escrituras de tareas.
+Dentro del criterio de implementación delegado, también se identifican como
+HTTP 400 los siguientes fallos de recepción, con field: "body":
+- Content-Length incorrecto: "Invalid request body length. Send a complete JSON body with a correct Content-Length."
+- Cuerpo interrumpido: "The request body was interrupted. Send the complete JSON body again."
+- Cuerpo comprimido dañado: "Invalid encoded request body. Send valid JSON with the correct Content-Encoding."
+El envelope es el mismo arreglo errors. La entrega de la respuesta requiere
+que la conexión del cliente continúe abierta; no se promete entregar un cuerpo
+HTTP después de que el cliente cierre o interrumpa definitivamente la conexión.
+
+RN-VAL-04. Fallos internos
+Responder HTTP 500 con {"error":"Internal server error."}.
+Registrar la causa en el servidor sin registrar el cuerpo completo recibido
+ni exponer detalles internos en la respuesta. Fuente: aprobación de G-07 y
+criterio técnico delegado para el manejador central de errores.
+
+RN-VAL-05. Compatibilidad de los errores existentes
+Conservar los códigos y cuerpos acordados para IDs inválidos, tarea inexistente,
+límite de creación y validaciones de POST/PATCH y filtros. El manejador central
+da formato a errores del parser e inesperados; no sustituye esas respuestas
+de negocio ni convierte los fallos internos en aparentes éxitos.
+
+ACTIVIDAD 5 — PRUEBAS DE LA API
+
+RN-TEST-01. Cobertura mínima del ticket
+Se requieren al menos dos pruebas automatizadas que cubran el filtrado nuevo
+y el endpoint bulk-complete.
+Fuente: paso 5 del README. Las pruebas de actualización de la base no sustituyen
+la cobertura de esos endpoints.
+
+P-TEST-01. Acordar el comando final y los escenarios de filtros y lote.
+La cobertura de filtros está comprobada. Los escenarios de lote y del parser
+fueron aprobados junto con las actividades 2 y 3 y se comprobaron en la suite
+de 74 pruebas; compilación correcta. El mínimo del ticket queda cubierto por
+pruebas HTTP de filtros y lote, además de las demás regresiones.
+Se conserva node:test con bases temporales y procesos aislados, ejecutable
+mediante npm run test:db con Node 20.20.2, además de npm run build.
+El comando npm test sigue siendo una propuesta; no se ha elegido ni creado.
+
+EVIDENCIA DE ACTIVIDADES 2 Y 3 — LOTE Y MANEJADOR CENTRAL
+
+- Node 20.20.2: 74 pruebas aprobadas, cero fallidas; duración de la ejecución
+  41824.2587 ms. npm run build finalizó correctamente con el mismo entorno.
+  Evidencia: data/bulk-tests.log y data/bulk-build.log.
+- Pruebas HTTP de conteo real, tareas ya completadas, inexistentes, entradas
+  inválidas, límite de lote, representación numérica original y reversión
+  completa de la operación; resultados y conservación contrastados con SQLite.
+- Se comprobaron propiedades ids repetidas, incluso cuando la última tiene
+  valor inválido, y rechazos sin perder el texto original por el parseo.
+- El corpus incluye UTF-8 con BOM, UTF-16LE, gzip y las variantes de ruta con
+  mayúsculas y slash final, conservando las verificaciones del cuerpo original.
+- tests/error-handler.test.ts cubre SyntaxError interno como 500, registro
+  de la causa sin cuerpo completo y delegación cuando headersSent ya es true.
+  Las pruebas HTTP cubren además el contrato del parser antes de Zod.
+- Servicio local reiniciado con Node 20.20.2 en localhost:3000. /health
+  respondió 200; /tasks respondió 200 con el cuerpo completo igual a SQLite.
+- El lote con ID 1, ya completado, respondió 200 con {"updated":0}. El ID
+  ausente 500000 produjo 404; el numeral afectado por redondeo, el ID 500001
+  y el duplicado produjeron 400 con field: "ids". Un JSON mal formado en
+  POST /tasks produjo 400 con field: "body" y el mensaje acordado.
+- Las cuatro tareas, metadatos de columnas, esquema y secuencia tasks=4
+  coinciden exactamente con data/bulk-before.json. integrity_check: ok.
+  La comprobación del servicio real no modificó sus datos.
+- Evidencia: data/bulk-verification.json, verificada en
+  2026-09-09T06:33:35.409Z. Se cierran las actividades 2 y 3 del plan.
+
+ACTIVIDAD 6 — DOCUMENTACIÓN
+
+RN-DOC-01. Documentación de los endpoints
+El README debe incluir los nuevos endpoints y ejemplos de comandos curl.
+Fuente: paso 6 del README.
+
+RN-DOC-02. Fundamentos de las reglas
+La documentación se preparará con las reglas confirmadas y las justificaciones
+aportadas por el usuario. Las propuestas pendientes se identificarán como tales.
+Fuente: petición actual; fundamento en J-10. Este documento conserva las fuentes
+para distinguir requisito, decisión, justificación y resultado comprobado.
+
+ENTREGA — GITHUB
+
+RN-ENT-01. Pull request y firma
+La entrega requiere un pull request desde un fork personal hacia main del
+repositorio terpa-solutions/task-tracker-api, con commits firmados/verificados.
+La descripción debe explicar los cambios, cómo verificarlos y las decisiones
+o compromisos adoptados.
+Fuente: apartado Final step del README.
+
+P-ENT-01. Identificar cuenta y fork, acordar remotos y rama, y definir o verificar
+el método de firma antes de crear commits. No se han elegido esos datos.
+Estado: PENDIENTE.
+
+ORDEN DE LAS SIGUIENTES ACTIVIDADES — ACORDADO
+
+Propuesta presentada: 1) acordar errores de validación pendientes; 2) incorporar
+priority y due_date en POST; 3) cerrar casos pendientes de PATCH e incorporar
+esos campos; 4) verificar el recorrido completo.
+Respuesta del usuario: "Sí, seguir ese orden".
+
+La secuencia 1.1 → 1.5 → 1.6 → 1.7/1.8 quedó completada en CIERRE G-01 A G-04:
+contrato de errores, Zod, POST, PATCH y recorrido integrado comprobados.
+
+Después continúan los pasos 2 a 6 en el orden del README y la entrega final.
+Sus preguntas se resolverán al abordar cada actividad. La lista ejecutable de
+pendientes está en PLAN_DE_TRABAJO.md y se depura al completar cada punto.
+
+REGISTRO DE ESTA ACTUALIZACIÓN DOCUMENTAL
+
+- El plan contiene solo trabajo pendiente; se retiraron actividades completadas,
+  tablas de avance histórico y tareas documentales que ya tenían evidencia.
+- Se agregaron las justificaciones J-01 a J-10 con sus fuentes y alcance.
+- Se preservaron los identificadores de reglas y preguntas existentes, los
+  ejemplos E-01 a E-08 y los resultados de la base y del listado.
+- Se distinguieron las reglas confirmadas, las propuestas sin aprobación y
+  las preguntas que deben resolverse antes de cada implementación.
+- La secuencia de continuación fue acordada expresamente con el usuario.
+
+REVISIÓN POSTERIOR DE J-06 — ANTECEDENTE DOCUMENTAL
+
+- El usuario justificó el envío de una cadena vacía como una modificación
+  deliberada y confirmó su conversión inmediata a null en PATCH.
+- Para solo espacios en PATCH confirmó 400 con la nomenclatura esperada.
+- Se actualizaron J-05/J-06, RN-DUE-09/10, RN-UPD-01, la tabla de entradas,
+  el ejemplo E-05, el nuevo E-09 y los pendientes del plan.
+- P-DUE-15 y P-DUE-16 registran las respuestas nuevas; los antecedentes
+  reemplazados quedaron identificados como tales.
+- Esta revisión correspondía al contrato escrito. Su implementación en PATCH
+  se completó y comprobó después en CIERRE G-01 A G-04.
+
+REVISIÓN TÉCNICA DE OCHO HALLAZGOS
+
+Fuente: informe del usuario con cuatro fallos técnicos y cuatro inconsistencias
+documentales. P-REV-01 y P-REV-02 recogen las decisiones solicitadas y aprobadas.
+
+1. Esquema incompatible: assertTaskSchema valida las columnas existentes antes
+   de agregar las faltantes y vuelve a comprobar el resultado. Rechaza priority
+   sin NOT NULL, default medium o CHECK del catálogo, y due_date sin tipo TEXT
+   nullable. Comprueba también los tipos de los valores almacenados. Cancelación
+   y conservación verificadas en bases temporales, incluidas tablas vacías.
+   El verificador reconoce la forma de CHECK descrita en README; otras expresiones
+   se rechazan si no puede establecer su compatibilidad, sin repararlas.
+2. Columnas calculadas: captureTasks usa table_xinfo y selecciona explícitamente
+   todas las columnas. Pruebas de valores calculados virtuales y almacenados.
+3. Arranque sin migrar: la API verifica esquema e IDs antes de sembrar tareas
+   o escuchar HTTP. Se comprobó el rechazo de una base antigua vacía sin
+   agregarle tareas, así como de un esquema incompatible.
+4. IDs: las rutas verifican primero la escritura decimal y después el rango.
+   PATCH/DELETE con 1.0000000000000001 y otras entradas inválidas devuelven 400
+   y conservan la tarea original en pruebas HTTP. Los IDs se leen como enteros
+   exactos de SQLite antes de convertirlos a números JSON. El rango vigente
+   1..500000 se comprobó por HTTP, incluidos los últimos dos IDs, el rechazo
+   de datos externos fuera del rango y la creación agotada con 400 sin cambiar
+   filas ni secuencia. Se repitió la verificación completa con Node 20.20.2 y
+   better-sqlite3 11.10.0 conforme a P-REV-04/05: 34 pruebas aprobadas y cero
+   fallidas. Punto cerrado con el entorno que conserva el requisito original.
+5. Etapa de errores: queda en 1.1 antes de implementar POST/PATCH. La actividad 4
+   ampliará y unificará validaciones, sin posponer ese acuerdo.
+6. P-ERR-01: pregunta solo estructura, idioma y redacción. Los rechazos por
+   formato de fecha o día anterior ya confirmado no se someten de nuevo a decisión.
+7. Alcance de comparación: README y RN-DB-02 especifican tasks y su secuencia.
+   Una prueba confirma que cambiar otra tabla no dispara esa comparación;
+   integridad y claves foráneas son comprobaciones diferentes.
+8. Diagnóstico: una tarea faltante incluye expected con su ID y actual null.
+   Se verificó un reemplazo de ID manteniendo el conteo. README distingue errores
+   por fila de errores de conteo o secuencia, que no tienen un taskId propio.
+
+Resultado histórico anterior a resolver P-REV-03: 30 pruebas contando subcasos; 29 aprobadas y
+una interrumpida por un aborto nativo del proceso temporal, antes de servir HTTP.
+En ese momento el punto 4 estaba parcialmente verificado. El resultado vigente
+de ese entorno fue 34 pruebas aprobadas y cero fallidas. La compilación pasó.
+El punto 4 se volvió a comprobar con el entorno compatible con Node 20+
+solicitado después en P-REV-04/05, también con 34 aprobadas y cero fallidas.
+/health y /tasks de la API local respondieron
+200; siguen las cuatro tareas originales, con priority medium y due_date null.
+Las nueve pruebas registradas en la ejecución inicial de la migración permanecen
+como evidencia histórica de esa ejecución; no representan el total de la suite actual.
+
+P-REV-03. Para resolver el aborto nativo con Node 24.20.0 y better-sqlite3
+11.10.0, ¿actualizar a better-sqlite3 13.0.3 y volver a verificar, elevando el
+mínimo a Node 22 y actualizando package.json/package-lock.json, o investigar
+una solución con las dependencias actuales?
+Respuesta del usuario: "Sí, proceder con esa actualización". Tras aclarar que
+se conserva Node 24.20.0 LTS y el mínimo del proyecto será 22, confirmó:
+"ok estoy de acuerdo".
+Estado: RESUELTA, aplicada y comprobada en su momento. En esa prueba,
+better-sqlite3 quedó fijado en 13.0.3 y el requisito de Node se elevó a >=22.
+La instalación usada para esa prueba fue Node 24.20.0.
+Esta decisión de entorno fue sustituida después por P-REV-04; la alternativa
+probada no es la configuración del entregable. P-REV-05 registra el reemplazo.
+Evidencia previa: la prueba HTTP de IDs grandes abortó tanto dentro de la suite como
+aisladamente, con RemoveEnvironmentCleanupHook y Assertion failed: (env) != nullptr
+en un destructor nativo de Statement. Las comprobaciones directas del esquema
+y de esos IDs sí completaron fuera de ese proceso de prueba; no se atribuye
+el fallo exclusivamente al valor del ID ni se afirma una causa interna definitiva.
+
+PRUEBA DE LA ALTERNATIVA P-REV-03 — RESULTADOS HISTÓRICOS VERIFICADOS
+
+- Se actualizó únicamente better-sqlite3 como dependencia directa a 13.0.3,
+  con el requisito Node >=22. Se conservó Node 24.20.0 instalado.
+- Antes de cambiar el límite de IDs, la suite anterior pasó sus 30 pruebas
+  con la dependencia nueva. El aborto nativo no se reprodujo.
+- Se aplicó el rango 1..500000 y el error 400 por límite alcanzado.
+- GET devolvió 499999 y 500000 como números distintos y exactos. PATCH y
+  DELETE aceptaron 500000; rechazaron 500001 y las escrituras inválidas con 400.
+- POST creó los IDs 499999 y 500000 con 201; la siguiente creación recibió
+  400 y conservó filas y secuencia. Borrar 500000 no habilitó otra creación.
+- Una inserción externa posterior al arranque con ID 500001 produjo un error
+  HTTP 500 al listar. Se repitió con 9007199254740992 y 9007199254740993:
+  no hubo respuesta exitosa con números redondeados.
+- Incluso con una secuencia externa en el máximo de SQLite de 64 bits, POST
+  devolvió el 400 acordado sin alterar filas ni secuencia.
+- El arranque rechazó bases con ID 500001 y otro fuera del rango seguro,
+  conservando sus datos. Las pruebas usan bases y procesos temporales.
+- npm run test:db: 34 pruebas aprobadas, incluidos subcasos; cero fallidas.
+- npm run build: correcto.
+- Tras reiniciar el servicio, GET /health y GET /tasks respondieron 200.
+- Se compararon las cuatro tareas, metadatos de columnas y secuencia de la
+  base local antes y después: idénticos. integrity_check devolvió ok.
+- Evidencia local: data/dependency-update-verification.json y la captura previa
+  data/dependency-update-before.json. Ambos archivos están excluidos de Git.
+- Se retiraron del plan los pendientes técnicos ya comprobados. En esa etapa
+  faltaban POST/PATCH, filtros y lote. POST/PATCH se completó posteriormente.
+  Esta evidencia corresponde a la
+  alternativa evaluada; la verificación del entorno final se registra abajo.
+
+P-REV-04. ¿Investigar una solución que conserve el mínimo original de Node 20
+antes de cerrar la decisión técnica?
+Respuesta del usuario: "quiero mantener el requisito original y adaptarme a el para la limitacion pero hacer la opcerbacion que se podria hacer ese cambio pero no quise tomar esa facultad".
+Estado: RESUELTA. El entregable debe conservar Node 20+, con IDs 1..500000.
+La alternativa 13.0.3 con mínimo 22 fue probada, pero no se adoptará en la
+entrega. Su retiro y la verificación del entorno sustituto se completaron en P-REV-05.
+Fundamento: J-13. No equivale a aprobar una versión sustituta no consultada.
+
+P-REV-05. ¿Restaurar better-sqlite3 11.10.0 con el rango original ^11.8.1,
+preparar Node 20.20.2 portátil para este proyecto y ejecutar pruebas, compilación
+y servicio con ese entorno, conservando el límite 500000?
+Respuesta del usuario: "Sí, aplicar y comprobar esa alternativa".
+Estado: RESUELTA, aplicada y comprobada. Node 20.20.2 está preparado únicamente
+en data/toolchains/node-v20.20.2-win-x64. Node 24.20.0 permanece instalado globalmente.
+Se restauraron las dependencias originales y se declaró Node >=20 en el
+manifiesto y la raíz del archivo de bloqueo.
+Base de la propuesta: package.json original declara ^11.8.1 y su archivo de
+bloqueo fija 11.10.0. Node 20.20.2 dispone de distribución portátil oficial:
+https://nodejs.org/en/blog/release/v20.20.2
+La verificación se ejecutó de nuevo con este entorno: no se utilizaron los
+resultados de 13.0.3 para dar por aprobada la alternativa compatible.
+
+Observación acordada para la documentación de entrega
+Se evaluó actualizar better-sqlite3 a 13.0.3 para resolver un fallo nativo del
+entorno local. Esa alternativa requiere elevar el mínimo de Node a 22.
+Se decidió conservar el requisito original Node 20+ y adaptar la solución a
+él, para respetar el alcance del examen. La configuración compatible y sus
+resultados están documentados en README.md y en el registro siguiente.
+
+CIERRE CON EL REQUISITO ORIGINAL — P-REV-04/05
+
+- Entorno de ejecución y pruebas: Node 20.20.2 portátil y npm 10.8.2.
+- Se comprobó el SHA256 del ZIP de Node contra la publicación oficial.
+- package.json conserva better-sqlite3 ^11.8.1; el archivo de bloqueo conserva
+  11.10.0 y todas las demás dependencias originales. Su única diferencia frente
+  al bloqueo inicial es declarar engines.node >=20 en la raíz del proyecto.
+- npm ci con Node 20: correcto. No se elevaron las versiones de otras dependencias.
+- npm run test:db: 34 pruebas aprobadas, incluidos subcasos; cero fallidas,
+  omitidas o canceladas. El aborto nativo no se reprodujo.
+- Se verificaron por HTTP los IDs 499999 y 500000, el 400 al exceder el rango,
+  las rutas inválidas, el error ante IDs externos fuera del rango y la
+  conservación de filas y secuencia ante una creación rechazada.
+- npm run build: correcto.
+- El servicio quedó activo con el ejecutable portátil de Node 20.20.2.
+- GET /health y GET /tasks: HTTP 200. Se conservaron las cuatro tareas,
+  sus metadatos de columnas y la secuencia, comparados con la captura anterior.
+  SQLite integrity_check: ok.
+- Evidencia local: data/node20-verification.json, data/node20-tests.log y
+  data/node20-build.log; los archivos bajo data/ están excluidos de Git.
+- El README incluye la observación solicitada sobre la alternativa de elevar
+  el mínimo, y cómo usar el entorno local sin sustituir Node global.
+- Los pendientes de esta revisión técnica se retiraron del plan. Después se
+  cerró el contrato de errores y se incorporaron priority y due_date en POST
+  y PATCH, según el registro siguiente.
+
+CIERRE G-01 A G-04 — PRIORITY Y DUE_DATE EN POST/PATCH
+
+- Se implementaron las seis alternativas aprobadas al inicio de este documento,
+  con mensajes en inglés y Zod 4.5.4; se conservó el requisito Node >=20.
+- POST recibe title, priority y due_date. Aplica medium al omitir priority y
+  NULL a la fecha ausente; valida antes de insertar y devuelve lo leído de SQLite.
+- PATCH recibe title, completed, priority y due_date. Conserva los omitidos,
+  quita la fecha inmediatamente con null o cadena vacía, rechaza solo espacios
+  y no aplica cambios parciales cuando cualquier campo es inválido.
+- Se comprobaron mensajes, orden de errores, campos no permitidos, cuerpos
+  no objeto/vacíos, tipos, formato, calendario y comparación con el día local.
+- El recorrido HTTP crear/listar/modificar/quitar fecha/eliminar se contrastó
+  con SQLite en una base temporal, conservando las tareas iniciales.
+- npm run test:db con Node 20.20.2: 44 pruebas aprobadas; cero fallidas,
+  omitidas o canceladas. Incluye las regresiones de migración e IDs 1..500000.
+- npm run build: correcto con el mismo entorno.
+- Servicio activo con Node 20.20.2; GET /health y GET /tasks respondieron 200.
+  Las cuatro tareas de data/tasks.db, los metadatos de sus columnas y la
+  secuencia coinciden con la captura anterior. integrity_check: ok.
+  El archivo de bloqueo conserva todas las dependencias anteriores; solo se
+  agregó Zod 4.5.4. Comparación registrada en data/fields-verification.json.
+- Fuentes actuales: src/schemas/tasks.schema.ts, src/controllers/tasks.controller.ts,
+  src/models/tasks.model.ts, src/routes/tasks.ts, src/app.ts y
+  tests/api-safety.test.ts. El README incluye el contrato y ejemplos.
+- Evidencia local: data/fields-tests.log, data/fields-build.log,
+  data/fields-http-evidence.json y data/fields-error-catalog.json.
+- Los pendientes completados y G-01 a G-04 se retiraron del plan. En ese cierre,
+  el siguiente bloque era filtros, con decisiones aún pendientes en G-05;
+  JSON mal formado seguía en G-07, y lote y su cobertura en G-06/G-08.
+  Sus aprobaciones y avances posteriores constan en las secciones respectivas.
+- La aprobación no se extiende a resolver esos grupos sin consultar al usuario.
+
+PROPUESTA DE ORGANIZACIÓN SOLICITADA DESPUÉS DEL CIERRE
+
+El usuario solicita evaluar routes, controllers y models para facilitar el
+crecimiento del proyecto, con código TypeScript. Pide explicar la conclusión
+y el sistema de módulos antes de reorganizar. En ese momento la estructura
+concreta quedó pendiente. La instrucción posterior y su cierre están abajo.
+
+CORRECCIÓN DE ALCANCE — SOLO .ts
+
+Instrucción vigente del usuario: "ts y se acabo nada mas".
+El código fuente, pruebas y auxiliares propios se mantienen en archivos .ts,
+con import/export y la configuración ESM original. No se adoptan .mts, .cts
+ni .cjs para ese código. Los archivos JavaScript de dist son salida del compilador.
+Se revirtió la reorganización iniciada sin confirmación de la estructura
+concreta. En esa etapa se dejó pendiente el acuerdo para reorganizar.
+Se conservan las validaciones de POST/PATCH ya aprobadas y Zod.
+Verificación posterior a la reversión con Node 20.20.2: 44 pruebas aprobadas,
+cero fallidas, omitidas o canceladas; compilación correcta.
+Evidencia: data/ts-restored-tests.log y data/ts-restored-build.log.
+El servicio volvió a quedar activo con Node 20.20.2. /health y /tasks
+respondieron 200; las cuatro tareas, columnas y secuencia permanecen iguales
+a la captura previa. SQLite integrity_check: ok (data/fields-verification.json).
+
+ORGANIZACIÓN EN TYPESCRIPT — CONTROLADORES .ts
+
+RN-ARQ-01. Separación de responsabilidades con archivos .ts
+Fuente: petición de separar controllers, models y routes para facilitar el
+crecimiento del proyecto, seguida de "omite mts y los controller son ts porfabor".
+La separación solicitada se implementó conservando .ts para todo el código
+fuente, las pruebas y los auxiliares propios. ESM y NodeNext permanecen como
+estaban. La redacción pública de validaciones sigue en inglés y se usa Zod.
+Motivo aportado: facilitar el crecimiento del proyecto. La separación evita
+concentrar consultas SQL y tratamiento HTTP en el mismo archivo de rutas.
+
+- routes/tasks.ts registra los endpoints y sus controladores.
+- controllers/tasks.controller.ts valida las solicitudes con los esquemas,
+  llama al modelo y construye las respuestas HTTP.
+- models/tasks.model.ts contiene SQL parametrizado y transacciones. Conserva
+  la comprobación del límite de IDs, inserción y conversión en una transacción.
+- schemas/tasks.schema.ts contiene las reglas Zod y los mensajes acordados.
+- db.ts conserva la inicialización y types.ts los tipos y la conversión.
+- Se conservaron reglas, formato de errores, orden de comprobaciones de PATCH,
+  valores predeterminados, códigos HTTP y comportamiento de los IDs.
+- Node 20.20.2: 44 pruebas aprobadas, cero fallidas/omitidas/canceladas;
+  compilación correcta. Evidencia: data/controllers-ts-tests.log y
+  data/controllers-ts-build.log. La revisión de estructura se retiró del plan.
+- El servicio se reinició con esta estructura y Node 20.20.2. /health y
+  /tasks devolvieron 200; las cuatro tareas, columnas y secuencia coinciden
+  con la captura previa. Integridad: ok. No se cambiaron dependencias.
+  Evidencia: data/controllers-ts-verification.json.
+
+REVISIÓN DE CALIDAD POSTERIOR AL CIERRE DE FILTROS
+
+Fuente: revisión adjunta por el usuario, acompañada de "vamos por eso".
+Se incorporó al plan la corrección del arranque antes de lote y errores,
+seguida por simplificaciones internas, documentación y revisión de dependencias.
+El listado uniforme y su cambio respecto al arreglo directo ya están
+documentados y comprobados; no se reabre P-FIL-02.
+
+Hallazgo histórico reproducido antes de corregir P-INI-01: una tabla tasks
+vacía provocaba la siembra de cuatro ejemplos al reiniciar. Con sqlite_sequence
+en 499996, la API arrancó y agregó IDs 499997 a 500000. Con secuencias 499997
+y 500000, dos intentos consecutivos de arranque fallaron con
+DatabaseContractError por el ID 500001. La transacción revirtió y conservó
+cero filas, la secuencia original y la integridad de SQLite; aun así, el
+servicio no pudo arrancar en esos casos.
+Prueba aislada con Node 20.20.2, sin modificar la base de trabajo.
+Evidencia: data/seed-restart-review/evidence.json.
+
+P-INI-01. Identificar una instalación nueva para cargar ejemplos
+Estado: RESUELTA. Respuesta expresa del usuario: "ok acepto date".
+La aprobación siguió a la explicación de ventajas y consecuencias y a la
+confirmación de conservar los datos existentes. Se acuerda identificar una
+tabla nueva, no únicamente un archivo nuevo: un archivo SQLite existente
+puede no contener tasks y también debe recibir ejemplos al crear esa tabla.
+La decisión sustituye la siembra anterior basada en que tasks estuviera vacía.
+Las reglas vigentes y sus consecuencias se detallan en RN-INI-01 a RN-INI-03.
+
+RN-INI-01. Condición para cargar datos de ejemplo
+Dentro de la transacción de inicialización, comprobar si tasks existe ANTES
+de aplicar schema.sql. Sembrar ejemplos solo cuando esa inicialización crea
+la tabla tasks. Se aplica tanto a un archivo SQLite nuevo como a un archivo
+ya existente que no contenía tasks. El tamaño del archivo y el número de filas
+de la tabla no determinan si deben cargarse ejemplos.
+Fuente: aprobación de P-INI-01 tras explicar expresamente el criterio de tabla.
+
+RN-INI-02. Conservación de tablas existentes
+Si tasks ya existía, conservar sus filas y su secuencia, aunque esté vacía.
+Reiniciar después de borrar deliberadamente todas las tareas no debe insertar
+muestras ni consumir nuevos IDs. Una tabla compatible creada manualmente y
+vacía tampoco recibe muestras. Si se borra la tabla completa, al recrearla en
+otra inicialización se vuelven a cargar ejemplos; esta consecuencia se explicó
+antes de la aprobación y no equivale a autorizar borrar la tabla existente.
+Justificación presentada y aprobada: respetar el borrado deliberado y evitar
+que un reinicio consuma IDs insertando ejemplos o impida arrancar al llegar
+al límite. No se atribuyen al usuario motivos adicionales no expresados.
+
+RN-INI-03. Comprobaciones y atomicidad
+La detección previa de tasks, aplicación del esquema, comprobaciones de
+compatibilidad y de IDs, y eventual siembra forman parte de la transacción
+de inicialización. Un fallo revierte la operación y conserva la base anterior,
+incluidas filas y secuencia; no quedan ejemplos parcialmente insertados.
+Se mantienen las restricciones vigentes del esquema y de IDs, el requisito
+Node 20+, los archivos .ts, las dependencias y los contratos de los endpoints.
+
+Estado de implementación y evidencia de P-INI-01
+Estado: IMPLEMENTADA Y COMPROBADA. Node 20.20.2: 63 pruebas aprobadas,
+cero fallidas/omitidas/canceladas; compilación correcta. Evidencia:
+data/seed-startup-tests.log y data/seed-startup-build.log.
+
+Cobertura de las reglas de inicialización:
+- RN-INI-01: la instalación nueva recibe ejemplos y no los duplica al volver
+  a iniciar; un archivo SQLite existente sin tasks recibe ejemplos y conserva
+  las otras tablas.
+- RN-INI-02: los reinicios conservan tasks existente, vacía o poblada, sin
+  reinsertar ejemplos. POST después de reiniciar una tabla vaciada respeta la
+  secuencia y su límite: usa el siguiente ID disponible o devuelve el 400
+  acordado, conservando filas y secuencia ante el rechazo.
+- RN-INI-03: las regresiones de arranque siguen rechazando esquemas antiguos
+  o incompatibles e IDs fuera de rango, conservando las capturas anteriores.
+  La detección y la siembra permanecen dentro de la transacción de inicialización.
+
+Comprobación del servicio local después de reiniciar:
+- /health y /tasks en localhost:3000 respondieron HTTP 200; el cuerpo completo
+  del listado coincide con SQLite y mantiene el contrato uniforme aprobado.
+- Las cuatro tareas, los metadatos de sus columnas y la secuencia 4 coinciden
+  exactamente con la captura previa al reinicio; integrity_check: ok.
+- Evidencia: data/seed-startup-before.json y
+  data/seed-startup-verification.json, verificada en
+  2026-09-09T06:08:19.941Z. Los archivos de evidencia bajo data/ no se versionan.
+
+La reproducción histórica del fallo y las 52 pruebas del cierre previo de
+filtros se conservan como antecedentes; la evidencia vigente de este cambio
+es la suite de 63 pruebas y la comprobación del servicio registrada arriba.
+En ese cierre, lote, parser y cambios de dependencias conservaban sus consultas
+pendientes. Las decisiones posteriores de lote y parser se aprobaron de forma
+expresa y se registraron en P-BULK-01/G-06 y G-07; no se dedujeron del informe.

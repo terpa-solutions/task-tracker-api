@@ -1,0 +1,2 @@
+# Preserve the archived decision payload byte-for-byte, including line endings.
+docs/DECISION_HISTORY.txt -text
