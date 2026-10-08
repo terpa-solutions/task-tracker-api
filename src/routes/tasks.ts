@@ -1,51 +1,137 @@
 import { Router, type Request, type Response } from 'express';
 import db from '../db.js';
+import {
+  bulkCompleteSchema,
+  createTaskSchema,
+  listQuerySchema,
+  toErrorResponse,
+  updateTaskSchema,
+} from '../schemas.js';
 import { toTask, type TaskRow } from '../types.js';
 
 export const tasksRouter = Router();
 
 // Prepared statements (compiled once, reused per request).
-const listStmt = db.prepare('SELECT * FROM tasks ORDER BY id ASC');
 const getStmt = db.prepare('SELECT * FROM tasks WHERE id = ?');
-const insertStmt = db.prepare('INSERT INTO tasks (title) VALUES (?)');
+const insertStmt = db.prepare(
+  'INSERT INTO tasks (title, priority, due_date) VALUES (?, ?, ?)',
+);
 const deleteStmt = db.prepare('DELETE FROM tasks WHERE id = ?');
 
-/** Parse and validate a route `:id` param, returning null when invalid. */
+/**
+ * Parse and validate a route `:id` param, returning null when invalid.
+ *
+ * The digits-only check is what keeps `Number`'s leniency out: on its own it
+ * reads "0x10" as 16, "1e3" as 1000 and " 5 " as 5, so several different URLs
+ * would resolve to the same task. The safe-integer check rejects ids too large
+ * to round-trip, which would otherwise reach the driver as a silently
+ * different number.
+ */
 function parseId(raw: string): number | null {
+  if (!/^\d+$/.test(raw)) {
+    return null;
+  }
+
   const id = Number(raw);
-  return Number.isInteger(id) && id > 0 ? id : null;
+  return Number.isSafeInteger(id) && id > 0 ? id : null;
 }
 
 /**
  * GET /tasks
- * List all tasks, oldest first.
+ * List tasks, oldest first. Supports `?completed=true|false` and
+ * `?priority=low|medium|high`, which can be combined.
  */
-tasksRouter.get('/', (_req: Request, res: Response) => {
-  const rows = listStmt.all() as TaskRow[];
+tasksRouter.get('/', (req: Request, res: Response) => {
+  const parsed = listQuerySchema.safeParse(req.query);
+  if (!parsed.success) {
+    return res.status(400).json(toErrorResponse(parsed.error));
+  }
+
+  const { completed, priority } = parsed.data;
+  const conditions: string[] = [];
+  const values: (string | number)[] = [];
+
+  if (completed !== undefined) {
+    conditions.push('completed = ?');
+    values.push(completed === 'true' ? 1 : 0);
+  }
+
+  if (priority !== undefined) {
+    conditions.push('priority = ?');
+    values.push(priority);
+  }
+
+  // The WHERE clause varies per request, so the statement is prepared here
+  // rather than once at module load. Values stay bound as parameters.
+  const where = conditions.length > 0 ? ` WHERE ${conditions.join(' AND ')}` : '';
+  const rows = db
+    .prepare(`SELECT * FROM tasks${where} ORDER BY id ASC`)
+    .all(...values) as TaskRow[];
+
   res.json(rows.map(toTask));
 });
 
 /**
- * POST /tasks
- * Create a task from { "title": "..." }.
+ * GET /tasks/:id
+ * Fetch a single task.
  */
-tasksRouter.post('/', (req: Request, res: Response) => {
-  const { title } = req.body ?? {};
-
-  if (typeof title !== 'string' || title.trim().length === 0) {
-    return res
-      .status(400)
-      .json({ error: 'Field "title" is required and must be a non-empty string.' });
+tasksRouter.get('/:id', (req: Request, res: Response) => {
+  const id = parseId(req.params.id);
+  if (id === null) {
+    return res.status(400).json({ error: 'Invalid task id.' });
   }
 
-  const info = insertStmt.run(title.trim());
+  const row = getStmt.get(id) as TaskRow | undefined;
+  if (!row) {
+    return res.status(404).json({ error: `Task ${id} not found.` });
+  }
+
+  res.json(toTask(row));
+});
+
+/**
+ * POST /tasks
+ * Create a task. `title` is required; `priority` and `due_date` are optional.
+ */
+tasksRouter.post('/', (req: Request, res: Response) => {
+  const parsed = createTaskSchema.safeParse(req.body ?? {});
+  if (!parsed.success) {
+    return res.status(400).json(toErrorResponse(parsed.error));
+  }
+
+  const { title, priority, due_date } = parsed.data;
+  const info = insertStmt.run(title, priority, due_date);
   const row = getStmt.get(info.lastInsertRowid) as TaskRow;
   res.status(201).json(toTask(row));
 });
 
 /**
+ * POST /tasks/bulk-complete
+ * Mark every task listed in { "ids": [1, 2, 3] } as completed.
+ *
+ * Responds with the number of tasks that actually changed: ids that do not
+ * exist, and tasks that were already completed, are skipped and not counted.
+ */
+tasksRouter.post('/bulk-complete', (req: Request, res: Response) => {
+  const parsed = bulkCompleteSchema.safeParse(req.body ?? {});
+  if (!parsed.success) {
+    return res.status(400).json(toErrorResponse(parsed.error));
+  }
+
+  const { ids } = parsed.data;
+  const placeholders = ids.map(() => '?').join(', ');
+  const info = db
+    .prepare(
+      `UPDATE tasks SET completed = 1 WHERE id IN (${placeholders}) AND completed = 0`,
+    )
+    .run(...ids);
+
+  res.json({ updated: info.changes });
+});
+
+/**
  * PATCH /tasks/:id
- * Update the title and/or completed state of a task.
+ * Update any subset of a task's title, completed state, priority or due date.
  */
 tasksRouter.patch('/:id', (req: Request, res: Response) => {
   const id = parseId(req.params.id);
@@ -58,34 +144,34 @@ tasksRouter.patch('/:id', (req: Request, res: Response) => {
     return res.status(404).json({ error: `Task ${id} not found.` });
   }
 
-  const { title, completed } = req.body ?? {};
+  const parsed = updateTaskSchema.safeParse(req.body ?? {});
+  if (!parsed.success) {
+    return res.status(400).json(toErrorResponse(parsed.error));
+  }
+
+  const { title, completed, priority, due_date } = parsed.data;
   const updates: string[] = [];
-  const values: (string | number)[] = [];
+  const values: (string | number | null)[] = [];
 
   if (title !== undefined) {
-    if (typeof title !== 'string' || title.trim().length === 0) {
-      return res
-        .status(400)
-        .json({ error: 'Field "title" must be a non-empty string.' });
-    }
     updates.push('title = ?');
-    values.push(title.trim());
+    values.push(title);
   }
 
   if (completed !== undefined) {
-    if (typeof completed !== 'boolean') {
-      return res
-        .status(400)
-        .json({ error: 'Field "completed" must be a boolean.' });
-    }
     updates.push('completed = ?');
     values.push(completed ? 1 : 0);
   }
 
-  if (updates.length === 0) {
-    return res
-      .status(400)
-      .json({ error: 'Provide at least one of "title" or "completed" to update.' });
+  if (priority !== undefined) {
+    updates.push('priority = ?');
+    values.push(priority);
+  }
+
+  // `null` is meaningful here: it clears an existing due date.
+  if (due_date !== undefined) {
+    updates.push('due_date = ?');
+    values.push(due_date);
   }
 
   values.push(id);
