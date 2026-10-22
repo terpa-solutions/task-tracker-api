@@ -1,0 +1,14 @@
+// Type-checks the test suite as well as src/.
+//
+// The main tsconfig.json sets rootDir to src/, so tests/ cannot be added to its
+// `include` without changing the shape of dist/. This config only reports types
+// (noEmit) and exists so `npm run typecheck` covers the tests too — `npm run
+// build` deliberately still compiles src/ alone.
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "rootDir": "."
+  },
+  "include": ["src/**/*.ts", "tests/**/*.ts"]
+}

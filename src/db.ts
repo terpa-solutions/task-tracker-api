@@ -11,13 +11,21 @@ import { fileURLToPath } from 'node:url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const projectRoot = path.resolve(__dirname, '..');
 
-const dataDir = path.join(projectRoot, 'data');
-const dbPath = path.join(dataDir, 'tasks.db');
 const schemaPath = path.join(projectRoot, 'schema.sql');
 const seedPath = path.join(projectRoot, 'seed.sql');
 
-// Ensure the data/ directory exists before opening the database file.
-fs.mkdirSync(dataDir, { recursive: true });
+/**
+ * Where the database file lives.
+ *
+ * Defaults to `data/tasks.db` at the project root. `TASKS_DB_PATH` overrides it
+ * so the test suite can point at a throwaway file per run instead of mutating
+ * the database you have been poking at by hand — a test that wipes your dev
+ * data is a test you stop running.
+ */
+const dbPath = process.env.TASKS_DB_PATH ?? path.join(projectRoot, 'data', 'tasks.db');
+
+// Ensure the parent directory exists before opening the database file.
+fs.mkdirSync(path.dirname(dbPath), { recursive: true });
 
 // Open (or create) the SQLite database file.
 export const db: DatabaseType = new Database(dbPath);
@@ -36,6 +44,35 @@ function applySchema(): void {
 }
 
 /**
+ * Bring an already-existing `tasks` table up to date with `schema.sql`.
+ *
+ * `schema.sql` uses `CREATE TABLE IF NOT EXISTS`, so on a database created by
+ * an older version of this app the statement is a no-op and newly declared
+ * columns would never appear. Databases predate code changes, so we add any
+ * missing column explicitly.
+ *
+ * Adding a column is driven by `PRAGMA table_info`, which makes this safe to
+ * run on every start: existing rows pick up the column default (`'medium'` for
+ * priority, `NULL` for due_date) and a second run finds nothing to do.
+ */
+function migrate(): void {
+  const columns = db.prepare('PRAGMA table_info(tasks)').all() as { name: string }[];
+  const existing = new Set(columns.map((column) => column.name));
+
+  const additions: Record<string, string> = {
+    priority: "ALTER TABLE tasks ADD COLUMN priority TEXT NOT NULL DEFAULT 'medium' CHECK (priority IN ('low', 'medium', 'high'))",
+    due_date: 'ALTER TABLE tasks ADD COLUMN due_date TEXT',
+  };
+
+  for (const [column, statement] of Object.entries(additions)) {
+    if (!existing.has(column)) {
+      db.exec(statement);
+      console.log(`🛠️  Migrated: added column "${column}" to tasks`);
+    }
+  }
+}
+
+/**
  * Seed sample data, but only when the tasks table is empty. This gives a fresh
  * clone immediate data to play with without duplicating rows on restart.
  */
@@ -51,6 +88,7 @@ function seedIfEmpty(): void {
 }
 
 applySchema();
+migrate();
 seedIfEmpty();
 
 export default db;
