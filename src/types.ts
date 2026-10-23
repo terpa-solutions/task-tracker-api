@@ -1,3 +1,9 @@
+/** Allowed task priority levels. */
+export type Priority = 'low' | 'medium' | 'high';
+
+/** All valid priorities, for validation and error messages. */
+export const PRIORITIES: readonly Priority[] = ['low', 'medium', 'high'];
+
 /**
  * How a task row is stored in SQLite.
  *
@@ -10,6 +16,9 @@ export interface TaskRow {
   title: string;
   completed: 0 | 1;
   created_at: string;
+  priority: Priority;
+  /** Calendar date as `YYYY-MM-DD`, or null when unset. */
+  due_date: string | null;
 }
 
 /**
@@ -22,6 +31,9 @@ export interface Task {
   title: string;
   completed: boolean;
   created_at: string;
+  priority: Priority;
+  /** Calendar date as `YYYY-MM-DD`, or null when unset. */
+  due_date: string | null;
 }
 
 /** Convert a raw database row into the API-facing Task shape. */
@@ -31,5 +43,7 @@ export function toTask(row: TaskRow): Task {
     title: row.title,
     completed: row.completed === 1,
     created_at: row.created_at,
+    priority: row.priority,
+    due_date: row.due_date,
   };
 }

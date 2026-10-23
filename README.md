@@ -21,7 +21,7 @@ The starting code is intentionally simple. The interesting part is the **ticket*
 
 ## Prerequisites
 
-- **Node.js 20+** (developed and tested on Node 22)
+- **Node.js 20+** to run the API; the test suite (Vitest 5) needs **Node 22.12+ or 24+** (Node 22 recommended; tested on Node 24; the project uses `better-sqlite3` ^12)
 - **npm** (ships with Node)
 
 That's it. The SQLite database is a local file that is created and initialized automatically on first run.
@@ -86,48 +86,137 @@ The API will be available at **http://localhost:3000**.
 On startup the app:
 - creates the `data/` directory and `data/tasks.db` if they don't exist,
 - applies `schema.sql` (idempotent — safe on every start),
+- migrates older databases: the migration is additive and idempotent — it adds the `priority` and `due_date` columns to an existing `tasks` table when they are missing and is a no-op otherwise (there is no schema version table),
 - seeds a few sample tasks **only if** the table is empty.
 
+### Configuration
+
+| Variable  | Default        | Description                                                                                                   |
+| --------- | -------------- | ------------------------------------------------------------------------------------------------------------- |
+| `PORT`    | `3000`         | HTTP port.                                                                                                    |
+| `DB_PATH` | `data/tasks.db` | SQLite file to use (relative paths resolve against the current directory). `:memory:` opens an ephemeral in-memory database. Empty = default path. |
+
+```bash
+# Run against a throwaway database on another port
+DB_PATH=./data/tmp.db PORT=3001 npm run dev
+```
+
 ### Verify it works
+
+The examples below assume a fresh database (the 4 seeded tasks, ids 1–4) and are meant to be run in order.
 
 ```bash
 # Health check
 curl http://localhost:3000/health
+# -> 200 {"status":"ok"}
 
 # List all tasks (returns the seeded sample data)
 curl http://localhost:3000/tasks
 
-# Create a task
+# Create a task (priority and due_date are optional)
 curl -X POST http://localhost:3000/tasks \
   -H "Content-Type: application/json" \
-  -d '{"title":"Write the pull request description"}'
+  -d '{"title":"Write the pull request description","priority":"high","due_date":"2026-11-15"}'
+# -> 201 {"id":5,"title":"Write the pull request description","completed":false,"created_at":"2026-10-23 23:03:05","priority":"high","due_date":"2026-11-15"}
 
-# Update a task (title and/or completed)
+# Update a task's priority and due date
+curl -X PATCH http://localhost:3000/tasks/5 \
+  -H "Content-Type: application/json" \
+  -d '{"priority":"low","due_date":"2026-11-30"}'
+# -> 200 {"id":5,...,"priority":"low","due_date":"2026-11-30"}
+
+# Clear the due date
+curl -X PATCH http://localhost:3000/tasks/5 \
+  -H "Content-Type: application/json" \
+  -d '{"due_date":null}'
+# -> 200 {"id":5,...,"priority":"low","due_date":null}
+
+# Mark a task as completed
 curl -X PATCH http://localhost:3000/tasks/1 \
   -H "Content-Type: application/json" \
   -d '{"completed":true}'
 
+# Filter: pending high-priority tasks (quote the URL so the shell doesn't interpret "&")
+curl "http://localhost:3000/tasks?completed=false&priority=high"
+# -> 200 [{"id":4,"title":"Open a pull request with the completed work","completed":false,...,"priority":"high","due_date":"2026-12-31"}]
+
+# Bulk-complete: duplicates are deduped, unknown ids (999) are ignored
+curl -X POST http://localhost:3000/tasks/bulk-complete \
+  -H "Content-Type: application/json" \
+  -d '{"ids":[2,3,3,999]}'
+# -> 200 {"updated":2}
+# Repeating the same request -> 200 {"updated":0} (those tasks are already completed)
+
+# Invalid input -> 400 with details
+curl -X POST http://localhost:3000/tasks \
+  -H "Content-Type: application/json" \
+  -d '{"title":"","priority":"urgent","due_date":"2026-11-15T10:00:00Z"}'
+# -> 400 (see "Errors" below for the full body)
+
 # Delete a task
-curl -X DELETE http://localhost:3000/tasks/1
+curl -X DELETE http://localhost:3000/tasks/5
+# -> 204 (no body)
 ```
+
+> **PowerShell:** the examples above are for bash (Git Bash, macOS, Linux). In PowerShell use `curl.exe` (in Windows PowerShell 5.1 plain `curl` is an alias of `Invoke-WebRequest`), and note that PowerShell mangles the inner double quotes of `-d '{"title":...}'`. Piping the JSON body through stdin avoids the quoting issue:
+> `'{"title":"Hello","priority":"high"}' | curl.exe -X POST http://localhost:3000/tasks -H "Content-Type: application/json" --data-binary "@-"`
 
 ### Available scripts
 
-| Script          | What it does                                  |
-| --------------- | --------------------------------------------- |
-| `npm run dev`   | Start in watch mode with `tsx` (auto-reload). |
-| `npm start`     | Start once with `tsx` (no watch).             |
-| `npm run build` | Type-check and compile to `dist/` with `tsc`. |
+| Script               | What it does                                    |
+| -------------------- | ----------------------------------------------- |
+| `npm run dev`        | Start in watch mode with `tsx` (auto-reload).   |
+| `npm start`          | Start once with `tsx` (no watch).               |
+| `npm run build`      | Type-check and compile to `dist/` with `tsc`.   |
+| `npm test`           | Run the test suite once (Vitest + Supertest).   |
+| `npm run test:watch` | Run the tests in watch mode.                    |
 
-### Current API (starting point)
+The tests run against an in-memory database (`DB_PATH=:memory:`, set in `vitest.config.ts`) and never touch `data/`.
 
-| Method   | Path          | Description                              |
-| -------- | ------------- | ---------------------------------------- |
-| `GET`    | `/health`     | Liveness check.                          |
-| `GET`    | `/tasks`      | List all tasks.                          |
-| `POST`   | `/tasks`      | Create a task from `{ "title": "..." }`. |
-| `PATCH`  | `/tasks/:id`  | Update `title` and/or `completed`.       |
-| `DELETE` | `/tasks/:id`  | Delete a task.                           |
+### Task model
+
+| Field        | Type                          | Notes                                                                                     |
+| ------------ | ----------------------------- | ----------------------------------------------------------------------------------------- |
+| `id`         | integer                       | Assigned by the database.                                                                 |
+| `title`      | string                        | Required, non-empty (surrounding whitespace is trimmed).                                  |
+| `completed`  | boolean                       | Defaults to `false`.                                                                      |
+| `created_at` | string                        | Set by the database (`YYYY-MM-DD HH:MM:SS`, UTC).                                         |
+| `priority`   | `"low" \| "medium" \| "high"` | Defaults to `"medium"`.                                                                   |
+| `due_date`   | string \| `null`              | Calendar date `YYYY-MM-DD`, or `null`. A full ISO date-time (e.g. `2026-11-15T10:00:00Z`) is rejected with `400`. |
+
+### API
+
+| Method   | Path                   | Description |
+| -------- | ---------------------- | ----------- |
+| `GET`    | `/health`              | Liveness check. |
+| `GET`    | `/tasks`               | List tasks (oldest first). Optional filters `?completed=true\|false` and `?priority=low\|medium\|high`, combinable (AND). Values are strict and case-sensitive (`?priority=HIGH` → `400`); unknown query params are ignored. |
+| `POST`   | `/tasks`               | Create a task from `{ "title": "...", "priority"?: "...", "due_date"?: "YYYY-MM-DD" \| null }`. `201` with the task. |
+| `PATCH`  | `/tasks/:id`           | Update at least one of `title`, `completed`, `priority`, `due_date`. `"due_date": null` clears the date. `200` with the task. |
+| `DELETE` | `/tasks/:id`           | Delete a task. `204`. |
+| `POST`   | `/tasks/bulk-complete` | Mark tasks as completed from `{ "ids": [...] }`: 1 to 500 positive integer ids; duplicates are deduped; unknown ids are ignored. `200 { "updated": n }`, where `n` is how many tasks went from pending to completed (repeating the same request returns `0`). |
+
+### Errors
+
+All errors are JSON. Validation errors (`400`) include the first problem as `error` plus every problem in `details` (`field` is `null` for body-level errors):
+
+```json
+{ "error": "...", "details": [{ "field": "...", "message": "..." }] }
+```
+
+Other errors only carry `{ "error": "..." }`: invalid task id (`400`), task or route not found (`404`), malformed JSON body (`400`), body too large (`413`), other body-parsing errors such as an unsupported charset (`415`/`4xx`), and unexpected server errors (`500`).
+
+Real response for the invalid `POST /tasks` example above:
+
+```json
+{
+  "error": "Field \"title\" is required and must be a non-empty string.",
+  "details": [
+    { "field": "title", "message": "Field \"title\" is required and must be a non-empty string." },
+    { "field": "priority", "message": "Field \"priority\" must be one of: low, medium, high." },
+    { "field": "due_date", "message": "Field \"due_date\" must be a valid date in YYYY-MM-DD format or null." }
+  ]
+}
+```
 
 ---
 

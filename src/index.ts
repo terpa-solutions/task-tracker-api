@@ -1,22 +1,11 @@
-import express, { type Request, type Response } from 'express';
-import './db.js'; // Import for its side effect: open DB, apply schema, seed.
-import tasksRouter from './routes/tasks.js';
+import path from 'node:path';
+import { createApp } from './app.js';
+import { dbPath } from './db.js';
 
-const PORT = 3000;
+const PORT = Number(process.env.PORT) || 3000;
 
-const app = express();
-
-app.use(express.json());
-
-// Simple liveness check.
-app.get('/health', (_req: Request, res: Response) => {
-  res.json({ status: 'ok' });
-});
-
-// Task CRUD endpoints.
-app.use('/tasks', tasksRouter);
-
-app.listen(PORT, () => {
-  console.log('✅ Database initialized at data/tasks.db');
+createApp().listen(PORT, () => {
+  const shownDbPath = dbPath === ':memory:' ? dbPath : path.resolve(dbPath);
+  console.log(`✅ Database initialized at ${shownDbPath}`);
   console.log(`🚀 Task Tracker API running at http://localhost:${PORT}`);
 });
