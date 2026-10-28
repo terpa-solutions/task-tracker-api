@@ -86,7 +86,107 @@ The API will be available at **http://localhost:3000**.
 On startup the app:
 - creates the `data/` directory and `data/tasks.db` if they don't exist,
 - applies `schema.sql` (idempotent — safe on every start),
+- adds any columns missing from a database created by an older version
+  (e.g. `priority` and `due_date`), so an existing `data/tasks.db` keeps working,
 - seeds a few sample tasks **only if** the table is empty.
+
+Set `DB_PATH` to use a different database file, or `:memory:` for a throwaway one:
+
+```bash
+DB_PATH=:memory: npm start
+```
+
+### Available scripts
+
+| Script          | What it does                                             |
+| --------------- | -------------------------------------------------------- |
+| `npm run dev`   | Start in watch mode with `tsx` (auto-reload).            |
+| `npm start`     | Start once with `tsx` (no watch).                        |
+| `npm run build` | Type-check and compile to `dist/` with `tsc`.            |
+| `npm test`      | Run the test suite (Vitest + Supertest, in-memory DB).   |
+
+### API
+
+| Method   | Path                   | Description                                                  |
+| -------- | ---------------------- | ------------------------------------------------------------ |
+| `GET`    | `/health`              | Liveness check.                                              |
+| `GET`    | `/tasks`               | List tasks, oldest first. Filter with `completed`/`priority`. |
+| `POST`   | `/tasks`               | Create a task.                                               |
+| `PATCH`  | `/tasks/:id`           | Update any of `title`, `completed`, `priority`, `due_date`.  |
+| `DELETE` | `/tasks/:id`           | Delete a task.                                               |
+| `POST`   | `/tasks/bulk-complete` | Mark several tasks as completed.                             |
+
+#### Task shape
+
+```json
+{
+  "id": 2,
+  "title": "Review the interview ticket in the README",
+  "completed": false,
+  "priority": "high",
+  "due_date": "2026-11-01T17:00:00.000Z",
+  "created_at": "2026-10-28 15:57:23"
+}
+```
+
+| Field      | Type                              | Notes                                                       |
+| ---------- | --------------------------------- | ----------------------------------------------------------- |
+| `title`    | string                            | Required on create; trimmed; must not be blank.             |
+| `completed`| boolean                           | `false` on create.                                          |
+| `priority` | `"low"` \| `"medium"` \| `"high"` | Defaults to `"medium"`.                                     |
+| `due_date` | ISO 8601 string \| `null`         | Optional. See below.                                        |
+
+`due_date` accepts a date (`2026-12-31`) or a datetime with an explicit offset
+(`2026-12-31T17:00:00Z`, `2026-12-31T10:30:00-06:00`), and is always returned
+normalized to UTC (`2026-12-31T16:30:00.000Z`). A date-only value means midnight
+UTC. Datetimes without an offset are rejected because their meaning would depend
+on the server's timezone, and so are impossible dates such as `2026-02-30`.
+
+#### Filtering `GET /tasks`
+
+| Query param | Values                    |
+| ----------- | ------------------------- |
+| `completed` | `true` \| `false`         |
+| `priority`  | `low` \| `medium` \| `high` |
+
+Filters can be combined and are applied together (AND). Any other value — such as
+`completed=1` or a repeated param — returns `400`, and so does an unknown param, so
+a typo like `?priorty=high` fails loudly instead of returning an unfiltered list.
+
+#### `POST /tasks/bulk-complete`
+
+Body: `{ "ids": number[] }` with 1 to 1000 positive integer ids. Responds `200` with:
+
+```json
+{ "updated": 2, "not_found": [999] }
+```
+
+- `updated` — tasks that went from open to completed. Tasks that were already
+  completed are left as they are and not counted.
+- `not_found` — requested ids with no matching task, in request order. The other
+  ids are still completed, so one stale id doesn't block the rest.
+
+A repeated id is counted once in either field.
+
+#### Errors
+
+Invalid input returns `400` with one entry per problem, so a client can fix every
+field in one round trip:
+
+```json
+{
+  "error": "Invalid request body.",
+  "details": [
+    { "path": "title", "message": "Must not be empty." },
+    { "path": "priority", "message": "Must be one of: low, medium, high." }
+  ]
+}
+```
+
+Request bodies and the `GET /tasks` query are strict: unknown fields or params
+(e.g. a typo like `"prio"`) are rejected rather than silently ignored.
+Other errors use `{ "error": "..." }`: `404` for a missing task, `400` for malformed
+JSON, `413` for a body over 100 kB.
 
 ### Verify it works
 
@@ -97,37 +197,43 @@ curl http://localhost:3000/health
 # List all tasks (returns the seeded sample data)
 curl http://localhost:3000/tasks
 
-# Create a task
+# Filter: open tasks, high priority only (filters combine)
+curl "http://localhost:3000/tasks?completed=false&priority=high"
+
+# Create a task with a priority and a due date
 curl -X POST http://localhost:3000/tasks \
   -H "Content-Type: application/json" \
-  -d '{"title":"Write the pull request description"}'
+  -d '{"title":"Write the pull request description","priority":"high","due_date":"2026-11-03T18:00:00Z"}'
 
-# Update a task (title and/or completed)
+# Update a task (any subset of title, completed, priority, due_date)
 curl -X PATCH http://localhost:3000/tasks/1 \
   -H "Content-Type: application/json" \
-  -d '{"completed":true}'
+  -d '{"priority":"low","due_date":"2026-12-31"}'
+
+# Clear a due date
+curl -X PATCH http://localhost:3000/tasks/1 \
+  -H "Content-Type: application/json" \
+  -d '{"due_date":null}'
+
+# Complete several tasks at once -> {"updated":2,"not_found":[999]}
+curl -X POST http://localhost:3000/tasks/bulk-complete \
+  -H "Content-Type: application/json" \
+  -d '{"ids":[2,3,999]}'
+
+# Invalid input -> 400 with details
+curl -X POST http://localhost:3000/tasks \
+  -H "Content-Type: application/json" \
+  -d '{"title":"","priority":"urgent"}'
 
 # Delete a task
 curl -X DELETE http://localhost:3000/tasks/1
 ```
 
-### Available scripts
+Run the automated tests:
 
-| Script          | What it does                                  |
-| --------------- | --------------------------------------------- |
-| `npm run dev`   | Start in watch mode with `tsx` (auto-reload). |
-| `npm start`     | Start once with `tsx` (no watch).             |
-| `npm run build` | Type-check and compile to `dist/` with `tsc`. |
-
-### Current API (starting point)
-
-| Method   | Path          | Description                              |
-| -------- | ------------- | ---------------------------------------- |
-| `GET`    | `/health`     | Liveness check.                          |
-| `GET`    | `/tasks`      | List all tasks.                          |
-| `POST`   | `/tasks`      | Create a task from `{ "title": "..." }`. |
-| `PATCH`  | `/tasks/:id`  | Update `title` and/or `completed`.       |
-| `DELETE` | `/tasks/:id`  | Delete a task.                           |
+```bash
+npm test
+```
 
 ---
 
