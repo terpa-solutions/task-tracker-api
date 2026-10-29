@@ -4,3 +4,4 @@ CREATE TABLE IF NOT EXISTS tasks (
   completed INTEGER NOT NULL DEFAULT 0 CHECK (completed IN (0, 1)),
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
+

@@ -102,13 +102,29 @@ curl -X POST http://localhost:3000/tasks \
   -H "Content-Type: application/json" \
   -d '{"title":"Write the pull request description"}'
 
-# Update a task (title and/or completed)
+# Update a task (title, completed, priority, due_date)
 curl -X PATCH http://localhost:3000/tasks/1 \
   -H "Content-Type: application/json" \
-  -d '{"completed":true}'
+  -d '{"completed":true,"priority":"high"}'
 
 # Delete a task
 curl -X DELETE http://localhost:3000/tasks/1
+
+# Filter tasks
+curl "http://localhost:3000/tasks?completed=false"
+curl "http://localhost:3000/tasks?priority=high"
+curl "http://localhost:3000/tasks?completed=false&priority=medium"
+
+# Create a task with priority and due date
+curl -X POST http://localhost:3000/tasks \
+  -H "Content-Type: application/json" \
+  -d '{"title":"Deploy to production","priority":"high","due_date":"2026-11-15"}'
+
+# Bulk complete
+curl -X POST http://localhost:3000/tasks/bulk-complete \
+  -H "Content-Type: application/json" \
+  -d '{"ids":[2,3,4]}'
+# → {"updated":2}
 ```
 
 ### Available scripts
@@ -119,15 +135,16 @@ curl -X DELETE http://localhost:3000/tasks/1
 | `npm start`     | Start once with `tsx` (no watch).             |
 | `npm run build` | Type-check and compile to `dist/` with `tsc`. |
 
-### Current API (starting point)
+### Current API
 
-| Method   | Path          | Description                              |
-| -------- | ------------- | ---------------------------------------- |
-| `GET`    | `/health`     | Liveness check.                          |
-| `GET`    | `/tasks`      | List all tasks.                          |
-| `POST`   | `/tasks`      | Create a task from `{ "title": "..." }`. |
-| `PATCH`  | `/tasks/:id`  | Update `title` and/or `completed`.       |
-| `DELETE` | `/tasks/:id`  | Delete a task.                           |
+| Method   | Path                    | Description                                                                 |
+| -------- | ----------------------- | --------------------------------------------------------------------------- |
+| `GET`    | `/health`               | Liveness check.                                                             |
+| `GET`    | `/tasks`                | List tasks. Optional: `?completed=true\|false`, `?priority=low\|medium\|high`. |
+| `POST`   | `/tasks`                | Create a task from `{ "title", "priority"?, "due_date"? }`.                |
+| `PATCH`  | `/tasks/:id`            | Update `title`, `completed`, `priority`, and/or `due_date`.                |
+| `DELETE` | `/tasks/:id`            | Delete a task.                                                              |
+| `POST`   | `/tasks/bulk-complete`  | Mark multiple tasks complete: `{ "ids": number[] }` → `{ "updated": N }`.  |
 
 ---
 
